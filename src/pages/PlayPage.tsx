@@ -96,6 +96,18 @@ export function PlayPage() {
     );
   }
 
+  // 登录态确认前不挂 iframe:hello 握手会携带 user,auth 未就绪时下发 null
+  // 会被游戏侧 SDK 定格（游戏只认首个 hello,后续补发不更新）。
+  if (status === 'loading') {
+    return (
+      <div className="page play-page">
+        <main className="empty-wrap">
+          <EmptyState title="正在加载…" detail="正在确认登录状态。" />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="page play-page" ref={stageRef}>
       <header className="play-header">

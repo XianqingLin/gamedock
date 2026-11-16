@@ -32,7 +32,15 @@ export function GameFrame({ game, src, user }: GameFrameProps) {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [game.slug]);
+  }, [game.slug, user]);
+
+  // 登录态在 iframe 加载后才解析完成时,向游戏重发 hello 补发最终 user
+  // (游戏侧 SDK 只认首个 hello,此重发作为兜底,正常时序下无副作用)。
+  useEffect(() => {
+    if (!loaded) return;
+    const frameWindow = iframeRef.current?.contentWindow;
+    if (frameWindow) sendPlatformHello(frameWindow, window.location.origin, game.slug, user);
+  }, [loaded, game.slug, user]);
 
   const handleLoad = () => {
     setLoaded(true);

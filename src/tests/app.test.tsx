@@ -85,9 +85,10 @@ describe('详情页', () => {
 });
 
 describe('游戏运行页', () => {
-  it('站内游戏渲染外边框与游戏 iframe', () => {
+  it('站内游戏渲染外边框与游戏 iframe', async () => {
     renderApp(['/play/tether-together']);
-    expect(screen.getByRole('heading', { name: '默契行动' })).toBeInTheDocument();
+    // 登录态确认前运行页显示加载状态，确认后才挂 iframe
+    expect(await screen.findByRole('heading', { name: '默契行动' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '全屏' })).toBeInTheDocument();
     expect(screen.getByTitle('默契行动 游戏画面')).toBeInTheDocument();
   });
