@@ -1,0 +1,605 @@
+/* 小林游戏铺：温暖科技风 —— 深石墨 / 墨绿 / 深木，暖琥珀重点，青蓝少量点缀 */
+
+:root {
+  --bg: #161b18;
+  --panel: #1f2622;
+  --panel-2: #242c27;
+  --line: #323b34;
+  --ink: #ece7db;
+  --muted: #a7b0a6;
+  --amber: #e8a54e;
+  --amber-strong: #f0b264;
+  --amber-ink: #1a1206;
+  --teal: #4fb3a9;
+  --radius: 10px;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 32px 48px;
+}
+
+/* ---------- 焦点与可访问性 ---------- */
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ---------- 按钮 ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.btn-primary {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--amber-ink);
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--amber-strong);
+  border-color: var(--amber-strong);
+}
+
+.btn-primary:disabled {
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--line);
+}
+
+/* ---------- 首页头部 ---------- */
+
+.home-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.home-toolbar {
+  margin-bottom: 16px;
+}
+
+.brand-zh {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.brand-en {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.search-input {
+  min-height: 44px;
+  width: min(360px, 100%);
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.search-input::placeholder {
+  color: var(--muted);
+}
+
+/* ---------- 分类筛选 ---------- */
+
+.category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.chip {
+  min-height: 36px;
+  padding: 4px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.chip:hover {
+  border-color: var(--muted);
+}
+
+.chip-active {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--amber-ink);
+  font-weight: 600;
+}
+
+/* ---------- 游戏网格 ---------- */
+
+.game-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.game-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.game-card:hover {
+  border-color: var(--amber);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.game-cover {
+  display: block;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+
+.game-cover-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.game-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 14px;
+}
+
+.game-card-title {
+  font-weight: 600;
+}
+
+.game-card-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- 状态徽标（文字 + 颜色，不只靠颜色表达） ---------- */
+
+.status-badge {
+  display: inline-block;
+  width: fit-content;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-available {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.status-maintenance {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+/* ---------- 详情页 ---------- */
+
+.page-header {
+  display: flex;
+  margin-bottom: 20px;
+}
+
+.detail-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.detail-cover {
+  width: 240px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  background: var(--panel-2);
+}
+
+.detail-info {
+  flex: 1;
+  min-width: 260px;
+}
+
+.detail-info h1 {
+  margin: 0 0 12px;
+  font-size: 28px;
+}
+
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+
+.detail-description {
+  margin: 0 0 16px;
+  max-width: 60ch;
+}
+
+.detail-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 0 0 24px;
+}
+
+.detail-fields dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.detail-fields dd {
+  margin: 2px 0 0;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* ---------- 游戏运行页 ---------- */
+
+.play-page {
+  max-width: none;
+  padding: 0;
+}
+
+.play-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.play-title {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-frame {
+  position: relative;
+  flex: 1;
+  min-height: 60vh;
+  background: #000;
+}
+
+.game-frame iframe {
+  /* 绝对定位铺满:高度链上没有确定的 height 属性,height:100% 会解析失败,
+     iframe 塌缩成默认 150px(下方露出 .game-frame 黑底)。inset:0 不依赖父高度。 */
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.frame-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+/* ---------- 用户区 ---------- */
+
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.btn-link {
+  border: 0;
+  background: none;
+  padding: 6px 8px;
+  min-height: 44px;
+  color: var(--teal);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn-link:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.btn-link:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* ---------- 模态弹层 ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 10, 0.66);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.modal {
+  width: min(440px, 100%);
+  max-height: min(80vh, 640px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 20px 20px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 20px;
+}
+
+/* ---------- 表单 ---------- */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.form-field input {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+.form-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.form-error {
+  margin: 0;
+  color: #e08a6d;
+  font-size: 14px;
+}
+
+/* ---------- 好友面板 ---------- */
+
+.friends-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.friends-add {
+  display: flex;
+  gap: 10px;
+}
+
+.friends-add input {
+  flex: 1;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+.friends-section-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.friends-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.friend-row:last-child {
+  border-bottom: 0;
+}
+
+.friend-row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.friends-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* ---------- 空状态 ---------- */
+
+.empty-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.empty-state {
+  text-align: center;
+  max-width: 40ch;
+}
+
+.empty-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.empty-detail {
+  margin: 0 0 20px;
+  color: var(--muted);
+}
+
+.empty-action {
+  display: flex;
+  justify-content: center;
+}

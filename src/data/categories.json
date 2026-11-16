@@ -1,0 +1,6 @@
+[
+  { "id": "fighting", "label": "格斗" },
+  { "id": "action", "label": "动作" },
+  { "id": "co-op", "label": "双人合作" },
+  { "id": "platformer", "label": "平台跳跃" }
+]

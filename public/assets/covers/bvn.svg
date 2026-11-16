@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 420">
+  <rect width="320" height="420" fill="#221d16"/>
+  <path d="M320 0 L320 420 L96 420 Z" fill="#2b241a"/>
+  <path d="M60 60 L260 360" stroke="#e8a54e" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="160" cy="210" r="52" fill="#221d16" stroke="#e8a54e" stroke-width="5"/>
+  <text x="160" y="222" text-anchor="middle" font-family="'Noto Sans SC','Microsoft YaHei',sans-serif" font-size="34" font-weight="700" fill="#ece7db">VS</text>
+  <text x="160" y="330" text-anchor="middle" font-family="'Noto Sans SC','Microsoft YaHei',sans-serif" font-size="26" font-weight="600" fill="#ece7db">死神 VS 火影</text>
+  <text x="160" y="362" text-anchor="middle" font-family="'Noto Sans SC','Microsoft YaHei',sans-serif" font-size="14" letter-spacing="6" fill="#a7b0a6">重构版</text>
+</svg>

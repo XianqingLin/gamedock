@@ -1,0 +1,47 @@
+[
+  {
+    "id": "bvn",
+    "slug": "bvn",
+    "title": "死神 VS 火影 重构版",
+    "cover": "/assets/covers/bvn.svg",
+    "accentColor": "#e8a54e",
+    "categories": [
+      "fighting",
+      "action"
+    ],
+    "description": "死神与火影角色同场竞技的 2D 格斗游戏重构版，基于确定性帧同步引擎开发。",
+    "status": "available",
+    "order": 1,
+    "capabilities": {
+      "singlePlayer": true,
+      "localMultiplayer": true
+    }
+  },
+  {
+    "id": "tether-together",
+    "slug": "tether-together",
+    "title": "默契行动",
+    "cover": "/assets/covers/tether-together.svg",
+    "accentColor": "#4fb3a9",
+    "categories": [
+      "co-op",
+      "platformer"
+    ],
+    "description": "两名角色由绳索连接的双人合作平台游戏，支持本地双人、单人双控与在线合作。",
+    "launchUrl": "/g/tether-together/index.html",
+    "status": "available",
+    "version": "1.0.0",
+    "order": 2,
+    "capabilities": {
+      "singlePlayer": true,
+      "localMultiplayer": true,
+      "online": {
+        "mode": "platform",
+        "maxPlayers": 2,
+        "modes": [
+          "合作闯关"
+        ]
+      }
+    }
+  }
+]
