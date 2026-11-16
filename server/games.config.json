@@ -1,3 +1,4 @@
 {
-  "tether-together": "../web-tether-together/dist"
+  "tether-together": "../web-tether-together/dist",
+  "bvn": "../web-bvn/packages/app/dist"
 }

@@ -10,11 +10,20 @@
       "action"
     ],
     "description": "死神与火影角色同场竞技的 2D 格斗游戏重构版，基于确定性帧同步引擎开发。",
+    "launchUrl": "/g/bvn/index.html",
     "status": "available",
+    "version": "1.0.0",
     "order": 1,
     "capabilities": {
       "singlePlayer": true,
-      "localMultiplayer": true
+      "localMultiplayer": true,
+      "online": {
+        "mode": "platform",
+        "maxPlayers": 2,
+        "modes": [
+          "在线对战"
+        ]
+      }
     }
   },
   {

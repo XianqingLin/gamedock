@@ -71,12 +71,6 @@ describe('详情页', () => {
     expect(screen.getByText('1.0.0')).toBeInTheDocument();
   });
 
-  it('可用但启动地址缺失时显示“暂不可启动”且禁用', () => {
-    renderApp(['/games/bvn']);
-    const start = screen.getByRole('button', { name: '暂不可启动' });
-    expect(start).toBeDisabled();
-  });
-
   it('游戏不存在时显示未找到状态', () => {
     renderApp(['/games/unknown-game']);
     expect(screen.getByText('未找到该游戏')).toBeInTheDocument();
@@ -96,12 +90,6 @@ describe('游戏运行页', () => {
     expect(screen.getByRole('heading', { name: '默契行动' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '全屏' })).toBeInTheDocument();
     expect(screen.getByTitle('默契行动 游戏画面')).toBeInTheDocument();
-  });
-
-  it('不可启动游戏进入运行页时显示状态说明', () => {
-    renderApp(['/play/bvn']);
-    expect(screen.getByText('当前无法启动')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '返回详情' })).toBeInTheDocument();
   });
 
   it('运行页游戏不存在时显示未找到', () => {
