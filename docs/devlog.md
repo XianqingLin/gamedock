@@ -2,6 +2,38 @@
 
 按时间倒序记录已完成的开发、关键决策与验证状态。**行为需求仍以 01/02 号文档为准**,本文件只做进度与决策追溯,新增条目写在最上方。
 
+## 2026-11-18(四):需求文档对齐当前方向
+
+- 删除 `docs/03-business-review.md`、`docs/04-scene-description.md`(3D 据点时代的评审决策与场景规格)。
+- `01-product-requirements.md` 重写:剔除 3D 章节,定位为列表模式 + 账号/好友/存档 + 跨源游戏运行页;产品验收标准同步更新。`02-technical-requirements.md` 重写:技术栈更新为 Workers/D1/KV/R2 实际形态,新增域名与部署形态、postMessage 接口要求,测试清单覆盖服务端行为。
+- 3D 据点概念整体移出当前需求(重启另立文档);`PROJECT_PROMPT.md` 仍引用已删文档,待处置。
+
+## 2026-11-18(三):游戏静态资源迁 R2 + 内容域分离(阶段 1)
+
+### 决策
+
+- **游戏托管通道换轨**:Static Assets(`dist/g/<slug>`)→ R2 bucket `gamedock-games`,key 为 `g/<slug>/<路径>`(与 URL 路径一一对应)。平台仓库/CI 不再接触游戏产物;发布 = `node scripts/sync-games.mjs` 上传。
+- **内容域分离**:游戏跑在跨源 iframe(`games.gamedock.cn`),不再与平台同源。第三方游戏接入前的安全前提:平台会话 Cookie 为 host-only + SameSite=Lax,不进入游戏域;`/api` CORS 仅对游戏内容域开放(带凭据)。
+- **发布一致性**:R2 无原子目录替换,sync 脚本先传全部普通文件、最后写各游戏 `index.html`,把不一致窗口压到几乎为零。旧对象不清理(R2 CLI 无 list),多传无害。
+- **本地 dev**:vite 代理 `/g/*` → `wrangler dev` → 本地 R2 模拟;需先 `node scripts/sync-games.mjs --local` 喂数据。games.json 暂不动(阶段 2 迁 D1)。
+
+### 变更
+
+- `wrangler.jsonc`:R2 绑定 `GAMES`;自定义域 `games.gamedock.cn`;`run_worker_first` 加 `/g/*`。
+- `server/game-assets.mjs`(新):R2 静态资源服务——目录路径回退 `index.html`、Content-Type 元数据优先/扩展名推断兜底(`server/mime.mjs` 共享)、index.html `no-cache` 其余短缓存、单区间 Range 请求(206/Content-Range)、路径穿越拒绝。
+- `server/worker.mjs`:按 host 分流——游戏域全走 R2;主域 `/api` → API(附 CORS)、`/g/*` 生产 301 到内容域(dev 下读本地 R2:wrangler dev 配自定义域后会把请求 URL host 重写为第一个域,只能以 https 协议区分生产)、其余 → Static Assets。
+- `server/api.mjs`:CORS 处理(preflight 204/403;allowlist = 游戏内容域 + 请求自身源)。
+- `src/lib/launch.ts`:`GAME_ORIGIN`(生产 `https://games.gamedock.cn`,dev 空串同源代理),`resolveLaunch` 支持注入 origin 供测试。
+- `src/components/GameFrame.tsx`:postMessage 目标 origin 改为 iframe 自身源(跨源必须);入站消息加 `event.origin` 校验。
+- `scripts/sync-games.mjs`(新,替代 `copy-games.mjs` 已删):并发 8 上传、失败重试 3 次、index.html 沉底;`--local` 写本地模拟。wrangler 首次进入 devDependencies。
+- 测试:`game-assets.test.mjs`(R2 mock,14 项)、`worker.test.mjs`(路由分流 5 项)、api CORS 6 项、launch origin 拼接 1 项。
+
+### 验证
+
+- 全套 100 项测试 + tsc 通过。
+- `wrangler dev` 端到端:`/g/bvn/index.html` 200(html)、`/g/bvn` 目录回退、Range 206 + Content-Range 正确、未命中 404、游戏域 host 分流 200、SPA 200、`/api` CORS 精确放行游戏域/第三方无 CORS 头。
+- **线上部署验证**(R2 开通后):`wrangler r2 bucket create gamedock-games` → `npm run deploy`(三自定义域全挂,含新建 `games.gamedock.cn`)→ `node scripts/sync-games.mjs` 上传 249 文件。线上复验:`games.gamedock.cn/g/bvn/index.html` 200、目录回退 200、Range 206(Content-Range 正确)、未命中 404、主域 `/g/*` 301 到内容域、SPA 200、API CORS 正常。
+
 ## 2026-11-18（二）：接入 Cloudflare Workers + 删除 relay 残留
 
 ### 决策
