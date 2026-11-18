@@ -1,31 +1,31 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  connectXlp,
-  XlpApiError,
-  XlpError,
+  connectGameDock,
+  GameDockApiError,
+  GameDockError,
   type GameMessage,
   type PlatformHelloMessage,
-  type XlpEnv,
+  type GameDockEnv,
 } from '../src/index';
 import { FakeFetch, FakeWindow, autoReplyPlatform, helloMessage, makeEnv } from './fakes';
 
-function makeEnv_(hello: PlatformHelloMessage, fetcher: FakeFetch, parent?: FakeWindow, self?: FakeWindow): XlpEnv {
+function makeEnv_(hello: PlatformHelloMessage, fetcher: FakeFetch, parent?: FakeWindow, self?: FakeWindow): GameDockEnv {
   return makeEnv(hello, fetcher, parent, self);
 }
 
-describe('connectXlp 握手', () => {
+describe('connectGameDock 握手', () => {
   it('parentWindow 非 null 但无应答 → 走超时 standalone,能力不可用', async () => {
-    const sdk = await connectXlp({
+    const sdk = await connectGameDock({
       env: makeEnv_(helloMessage(), new FakeFetch(() => new Response('{}')), new FakeWindow()),
       helloTimeoutMs: 30,
     });
     assert.equal(sdk.standalone, true);
     assert.equal(sdk.slug, null);
     assert.equal(sdk.user, null);
-    await assert.rejects(() => sdk.saves.put('slot1', {}), XlpError);
-    await assert.rejects(() => sdk.rooms.create(), XlpError);
-    await assert.rejects(() => sdk.relay.connect('cred'), XlpError);
+    await assert.rejects(() => sdk.saves.put('slot1', {}), GameDockError);
+    await assert.rejects(() => sdk.rooms.create(), GameDockError);
+    await assert.rejects(() => sdk.relay.connect('cred'), GameDockError);
   });
 
   it('平台应答 game:ready → 完成握手,拿到 slug 与用户', async () => {
@@ -34,7 +34,7 @@ describe('connectXlp 握手', () => {
     const fetcher = new FakeFetch(() => new Response('{}'));
     autoReplyPlatform(parent, helloMessage({ id: 'u1', username: '小林' }), self);
 
-    const sdk = await connectXlp({ env: makeEnv_(helloMessage(), fetcher, parent, self) });
+    const sdk = await connectGameDock({ env: makeEnv_(helloMessage(), fetcher, parent, self) });
     assert.equal(sdk.standalone, false);
     assert.equal(sdk.slug, 'tether-together');
     assert.deepEqual(sdk.user, { id: 'u1', username: '小林' });
@@ -43,7 +43,7 @@ describe('connectXlp 握手', () => {
   });
 
   it('超时未收到 hello → standalone', async () => {
-    const sdk = await connectXlp({
+    const sdk = await connectGameDock({
       env: makeEnv_(helloMessage(), new FakeFetch(() => new Response('{}'))),
       helloTimeoutMs: 30,
     });
@@ -57,7 +57,7 @@ describe('saves API', () => {
     const self = new FakeWindow();
     const fetcher = new FakeFetch(responder);
     autoReplyPlatform(parent, helloMessage(), self);
-    const sdk = await connectXlp({ env: makeEnv_(helloMessage(), fetcher, parent, self) });
+    const sdk = await connectGameDock({ env: makeEnv_(helloMessage(), fetcher, parent, self) });
     return { sdk, fetcher };
   }
 
@@ -73,7 +73,7 @@ describe('saves API', () => {
     assert.deepEqual(call.body, { value: { level: 2 } });
   });
 
-  it('get 命中返回 value,404 返回 null,其余错误抛 XlpApiError', async () => {
+  it('get 命中返回 value,404 返回 null,其余错误抛 GameDockApiError', async () => {
     let status = 200;
     const { sdk } = await connectedSdk(() =>
       new Response(JSON.stringify(status === 200 ? { key: 'slot1', value: { hp: 9 }, updatedAt: 't' } : { error: '需要登录' }), { status }),
@@ -87,14 +87,14 @@ describe('saves API', () => {
     status = 401;
     await assert.rejects(
       () => sdk.saves.get('slot1'),
-      (err: unknown) => err instanceof XlpApiError && err.status === 401 && /需要登录/.test(String((err as Error).message)),
+      (err: unknown) => err instanceof GameDockApiError && err.status === 401 && /需要登录/.test(String((err as Error).message)),
     );
   });
 
-  it('非法 key 抛 XlpError 且不发出请求', async () => {
+  it('非法 key 抛 GameDockError 且不发出请求', async () => {
     const { sdk, fetcher } = await connectedSdk(() => new Response('{}'));
     for (const bad of ['bad.key', '../escape', '']) {
-      await assert.rejects(() => sdk.saves.put(bad as string, 1), XlpError);
+      await assert.rejects(() => sdk.saves.put(bad as string, 1), GameDockError);
     }
     assert.equal(fetcher.calls.length, 0);
   });
@@ -115,7 +115,7 @@ describe('postMessage 通道', () => {
     const parent = new FakeWindow();
     const self = new FakeWindow();
     autoReplyPlatform(parent, helloMessage(), self);
-    const sdk = await connectXlp({ env: makeEnv_(helloMessage(), new FakeFetch(() => new Response('{}')), parent, self) });
+    const sdk = await connectGameDock({ env: makeEnv_(helloMessage(), new FakeFetch(() => new Response('{}')), parent, self) });
 
     const received: GameMessage[] = [];
     const off = sdk.onPlatformMessage((m) => received.push(m));

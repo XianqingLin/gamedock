@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
  * purpose 隔离凭证用途,防止会话签名密钥被复用伪造其他 HMAC 场景。
  */
 
-const PURPOSE = 'xlp-relay-v1';
+const PURPOSE = 'gamedock-relay-v1';
 
 export const RELAY_ROLES = ['host', 'guest', 'spectator'];
 

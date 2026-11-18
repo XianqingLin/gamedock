@@ -14,7 +14,7 @@ export interface PlatformUser {
 export interface PlatformHelloMessage {
   v: typeof PROTOCOL_VERSION;
   t: 'platform:hello';
-  platform: 'xiao-lin-game-shop';
+  platform: 'gamedock';
   /** 当前游戏 slug,游戏侧 SDK 直接用它拼存档等 API 路径。 */
   slug: string;
   user: PlatformUser | null;
@@ -40,7 +40,7 @@ export function sendPlatformHello(
   const message: PlatformHelloMessage = {
     v: PROTOCOL_VERSION,
     t: 'platform:hello',
-    platform: 'xiao-lin-game-shop',
+    platform: 'gamedock',
     slug,
     user,
   };

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  connectXlp,
-  XlpError,
+  connectGameDock,
+  GameDockError,
   type RelayDataMessage,
   type RoomView,
 } from '../src/index';
@@ -103,12 +103,12 @@ async function connectedSdk(room: RoomView) {
     return ws;
   } as unknown as typeof WebSocket;
 
-  const sdk = await connectXlp({ env: makeEnv(helloMessage(), fetcher, parent, self, impl) });
+  const sdk = await connectGameDock({ env: makeEnv(helloMessage(), fetcher, parent, self, impl) });
   return { sdk, fetcher, server };
 }
 
 /** 建立一条就绪的中转连接。 */
-async function readyConnection(sdk: ReturnType<typeof connectXlp>) {
+async function readyConnection(sdk: ReturnType<typeof connectGameDock>) {
   const connectPromise = sdk.relay.connect('cred-token');
   const ws = FakeWebSocket.instances.at(-1)!;
   assert.equal(ws.url, 'wss://platform.test/api/relay');
@@ -136,7 +136,7 @@ describe('rooms REST 客户端', () => {
 
   it('非法房间码本地拒绝,不发出请求', async () => {
     const { sdk, fetcher } = await connectedSdk(fakeRoom());
-    await assert.rejects(() => sdk.rooms.join('12ab34'), XlpError);
+    await assert.rejects(() => sdk.rooms.join('12ab34'), GameDockError);
     assert.equal(fetcher.calls.length, 0);
   });
 
@@ -145,7 +145,7 @@ describe('rooms REST 客户端', () => {
     const self = new FakeWindow();
     const fetcher = new FakeFetch(() => new Response(JSON.stringify({ error: '房间已满' }), { status: 400 }));
     autoReplyPlatform(parent, helloMessage(), self);
-    const sdk = await connectXlp({ env: makeEnv(helloMessage(), fetcher, parent, self) });
+    const sdk = await connectGameDock({ env: makeEnv(helloMessage(), fetcher, parent, self) });
     await assert.rejects(
       () => sdk.rooms.join('654321'),
       (err: unknown) => /房间已满/.test(String((err as Error).message)),
@@ -212,18 +212,18 @@ describe('中转连接', () => {
     assert.equal(result.detail?.code, 4003);
   });
 
-  it('就绪前连接被关闭 → connect reject;非法 ch / payload 缺失抛 XlpError', async () => {
+  it('就绪前连接被关闭 → connect reject;非法 ch / payload 缺失抛 GameDockError', async () => {
     const { sdk } = await connectedSdk(fakeRoom());
 
     // 关闭先于 ready:connect 走 reject 路径。
     const failing = sdk.relay.connect('cred-token');
     const failingWs = FakeWebSocket.instances.at(-1)!;
     failingWs.close(4003, '房间已解散');
-    await assert.rejects(() => failing, XlpError);
+    await assert.rejects(() => failing, GameDockError);
 
     const { connection } = await readyConnection(sdk);
-    assert.throws(() => connection.send('BAD_CH', {}), XlpError);
-    assert.throws(() => connection.send('sync', undefined), XlpError);
+    assert.throws(() => connection.send('BAD_CH', {}), GameDockError);
+    assert.throws(() => connection.send('sync', undefined), GameDockError);
   });
 
   it('leave() 发送 leave 信封并关闭;close() 只断开不断房', async () => {

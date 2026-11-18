@@ -4,8 +4,8 @@
 
 | 用户名 | 密码 | 角色 | 用途 |
 | --- | --- | --- | --- |
-| `test_host` | `xlp-test-1234` | 房主 / 玩家 1 | 建房、1P 操作 |
-| `test_guest` | `xlp-test-1234` | 客人 / 玩家 2 | 加入房间、2P 操作、刷新重连测试 |
+| `test_host` | `gamedock-test-1234` | 房主 / 玩家 1 | 建房、1P 操作 |
+| `test_guest` | `gamedock-test-1234` | 客人 / 玩家 2 | 加入房间、2P 操作、刷新重连测试 |
 
 ## 使用方式
 
@@ -20,10 +20,10 @@
 ```bash
 curl -X POST http://localhost:8787/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username":"test_host","password":"xlp-test-1234"}'
+  -d '{"username":"test_host","password":"gamedock-test-1234"}'
 curl -X POST http://localhost:8787/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username":"test_guest","password":"xlp-test-1234"}'
+  -d '{"username":"test_guest","password":"gamedock-test-1234"}'
 ```
 
 仅限本地测试环境使用,不要用于任何部署环境。

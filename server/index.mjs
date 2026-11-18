@@ -106,8 +106,8 @@ if (isMain) {
   const config = loadServerConfig();
   const app = createApp(config);
   app.listen(config.port, '0.0.0.0', () => {
-    console.log(`[xiao-lin] 平台服务监听 :${config.port}`);
-    console.log(`[xiao-lin] 已接入游戏静态资源: ${Object.keys(config.gameRoots).join(', ') || '(无)'}`);
+    console.log(`[gamedock] 平台服务监听 :${config.port}`);
+    console.log(`[gamedock] 已接入游戏静态资源: ${Object.keys(config.gameRoots).join(', ') || '(无)'}`);
   });
 
   const shutdown = () => app.close(() => process.exit(0));

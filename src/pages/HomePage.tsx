@@ -44,8 +44,8 @@ export function HomePage() {
     <div className="page home-page">
       <header className="home-header">
         <div className="brand">
-          <h1 className="brand-zh">小林游戏铺</h1>
-          <p className="brand-en">XiaoLin Game Shop</p>
+          <h1 className="brand-zh">GameDock</h1>
+          <p className="brand-en">gamedock.cn</p>
         </div>
         <UserArea />
       </header>

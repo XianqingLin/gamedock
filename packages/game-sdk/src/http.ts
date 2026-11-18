@@ -1,9 +1,9 @@
-import { XlpApiError } from './errors';
-import type { XlpEnv } from './env';
+import { GameDockApiError } from './errors';
+import type { GameDockEnv } from './env';
 
-/** 平台 REST 通用请求:非 2xx 抛 XlpApiError(文案为服务端原文)。 */
+/** 平台 REST 通用请求:非 2xx 抛 GameDockApiError(文案为服务端原文)。 */
 export async function requestPlatform(
-  env: XlpEnv,
+  env: GameDockEnv,
   method: string,
   path: string,
   body?: unknown,
@@ -16,7 +16,7 @@ export async function requestPlatform(
   });
   const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
   if (!res.ok) {
-    throw new XlpApiError((data?.error as string) ?? `平台请求失败(${res.status})`, res.status);
+    throw new GameDockApiError((data?.error as string) ?? `平台请求失败(${res.status})`, res.status);
   }
   return data ?? {};
 }

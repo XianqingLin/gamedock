@@ -49,9 +49,9 @@ describe('registerUser / verifyLogin', () => {
 
   it('用户名不区分大小写唯一', () => {
     const db = emptyDb();
-    registerUser(db, { username: 'XiaoLin', password: 'secret66' });
-    expect(findUserByUsername(db, 'xiaolin')).not.toBeNull();
-    const dup = registerUser(db, { username: 'xiaolin', password: 'secret66' });
+    registerUser(db, { username: 'PlayerOne', password: 'secret66' });
+    expect(findUserByUsername(db, 'playerone')).not.toBeNull();
+    const dup = registerUser(db, { username: 'playerone', password: 'secret66' });
     expect(dup.ok).toBe(false);
     expect(dup.error).toBe('用户名已存在');
   });

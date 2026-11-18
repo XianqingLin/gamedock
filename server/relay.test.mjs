@@ -25,7 +25,7 @@ describe('中转凭证', () => {
     const token = signRelayCredential(base, secret, 60);
     const [payloadB64, mac] = token.split('.');
     // 篡改 payload(签名对不上)。
-    const forged = `${Buffer.from(JSON.stringify({ roomId: 'other', playerId: 'user-1', role: 'host', purpose: 'xlp-relay-v1', exp: Date.now() / 1000 + 60 })).toString('base64url')}.${mac}`;
+    const forged = `${Buffer.from(JSON.stringify({ roomId: 'other', playerId: 'user-1', role: 'host', purpose: 'wrong-purpose', exp: Date.now() / 1000 + 60 })).toString('base64url')}.${mac}`;
     expect(verifyRelayCredential(forged, secret)).toBeNull();
     // 错误密钥。
     expect(verifyRelayCredential(token, 'other-secret')).toBeNull();
@@ -38,7 +38,7 @@ describe('中转凭证', () => {
 
 // ---------- HTTP + WS 集成测试 ----------
 
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xlp-relay-test-'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gamedock-relay-test-'));
 const config = {
   port: 0,
   platformDistDir: path.join(dataDir, 'unused-dist'),

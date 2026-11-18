@@ -74,7 +74,7 @@ export async function handleApi(req, res, pathname, ctx) {
   const method = req.method === 'HEAD' ? 'GET' : req.method;
 
   if (pathname === '/api/health' && method === 'GET') {
-    sendJson(res, 200, { ok: true, service: 'xiao-lin-game-shop' });
+    sendJson(res, 200, { ok: true, service: 'gamedock' });
     return;
   }
 

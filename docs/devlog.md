@@ -1,6 +1,25 @@
-# 小林游戏铺:开发日志
+# GameDock:开发日志
 
 按时间倒序记录已完成的开发、关键决策与验证状态。**行为需求仍以 01/02 号文档为准**,本文件只做进度与决策追溯,新增条目写在最上方。
+
+## 2026-11-18：项目更名 GameDock（购入 gamedock.cn）
+
+### 变更
+
+- 品牌统一为 **GameDock**（域名 gamedock.cn）：界面页头、`index.html`、默认封面 SVG、全部 docs 文案中的「小林游戏铺 / XiaoLin Game Shop」一并替换；协议握手信封 `platform` 字段值 `'xiao-lin-game-shop'` → `'gamedock'`（SDK 不校验该值，运行时兼容）。
+- 包与代码标识：根包名 `gamedock`；SDK 包 `@xlp/game-sdk` → `@gamedock/game-sdk`；导出标识符 `connectXlp/XlpSdk/XlpEnv/XlpError/XlpApiError` → `connectGameDock/GameDockSdk/GameDockEnv/GameDockError/GameDockApiError`；bvn 与 tether 内 `xlp` 变量/属性更名 `dock`。
+- 目录 `xiao-lin-game-shop/` → `gamedock/`（VSCode 占用中,由后台脚本在文件夹释放后完成），web-bvn、web-tether-together 的 `file:` 依赖路径随之更新并重装依赖。
+- 测试中的用户名夹具（`小林`/`xiaolin` 等）是注册数据不是品牌,保留不动。
+- 残留运行时标识更名:会话 Cookie `xlp_session` → `gamedock_session`,中转凭证 PURPOSE `'xlp-relay-v1'` → `'gamedock-relay-v1'`,环境变量 `XLP_DATA_DIR`/`XLP_SESSION_SECRET` → `GAMEDOCK_DATA_DIR`/`GAMEDOCK_SESSION_SECRET`(已有会话/凭证失效,本地临时数据无实际影响);测试临时目录前缀与 `docs/test-accounts.md` 测试密码同步去掉 `xlp` 字样(本地已注册的 test_host/test_guest 密码仍为旧值,重新注册时用新密码)。
+- 验证：SDK 17 项测试、平台 79 项测试全部通过,`tsc + vite build` 成功。
+
+## 2026-11-16(晚)：联机方向二次调整——参考对象从 4399 改为 Steam，方案 A 作废
+
+### 决策
+
+- 设定变更：平台层对标 Steam 而非 4399。平台只负责商店/库/账号/好友/存档，**不做联机**——大厅、房间、匹配、排位、对战中转、对战凭证全部不做。唯一例外是好友邀请（仅信息传递）：发出/展示邀请、把人带进游戏页面、把游戏自定义连接参数交给游戏、提供可验证身份凭证；连接建立与数据传输由各游戏自理。
+- 直接后果：`docs/05-multiplayer-protocol.md`（方案 A 契约）重写为联机边界说明；本日早前完成的平台通用对战中转（rooms/relay/凭证）与 tether、bvn 的平台中转迁移**方向作废**。相关代码仍留在仓库中，处置（回退/保留改造）待定。
+- 游戏侧定位：web-bvn 的 `server/room-server.mjs` 回归"游戏自有联机服务器"（当前仍标注"已退役·仅作参考"）；tether 的自托管 server 已在迁移中删除，恢复方式待定。
 
 ## 2026-11-16(五):平台通用对战中转 + 房间服务
 
@@ -21,11 +40,11 @@
 - 断线广播 peer-left(disconnect)但不清槽位;REST 离开通过 ctx.relay.notifyLeave 广播;role 以房间记录为权威
 - 关闭码:4001 凭证无效 / 4002 认证超时 / 4003 房间不存在 / 4008 超发;app close 时 terminate 所有 WS(否则 server.close 挂起)
 
-**SDK 中转客户端**(`@xlp/game-sdk`,模块拆分为 errors/env/http/relay/index):
+**SDK 中转客户端**(`@gamedock/game-sdk`,模块拆分为 errors/env/http/relay/index):
 
 - `xlp.rooms.create/join/leave/get`(/api/rooms 封装,slug 默认取 hello);非法房间码本地拒绝
 - `xlp.relay.connect(credential)` → Promise<RelayConnection>,**等 ready 才 resolve**(就绪前被关则 reject);RelayConnection:send(ch,payload)(本地校验 ch/payload)、onData、onPeers(本地维护 room 视图,随成员事件更新)、onEvent(room-closed/error 原样上抛)、onStatus、leave()、close()(仅断开,保留重连窗口);重连 = 同凭证再 connect,`reconnected` 标志供游戏恢复状态
-- standalone 模式:rooms/relay/saves 全部异步抛 XlpError
+- standalone 模式:rooms/relay/saves 全部异步抛 GameDockError
 
 ### 已拍板的决策
 
@@ -46,16 +65,16 @@
 - 用户名规则不含连字符,测试账号用下划线
 - REST 离开后 socket close 会二次广播 peer-left——dropFromRoom 需检查成员仍在房间
 
-## 2026-11-16(四):游戏侧 SDK `@xlp/game-sdk`(tether 落地)
+## 2026-11-16(四):游戏侧 SDK `@gamedock/game-sdk`(tether 落地)
 
 ### 已完成
 
-**SDK 包**(`xiao-lin-game-shop/packages/game-sdk/`,零依赖 TS,tsc 产出 ESM dist + d.ts):
+**SDK 包**(`gamedock/packages/game-sdk/`,零依赖 TS,tsc 产出 ESM dist + d.ts):
 
-- `connectXlp(options?)`:与平台握手,永不 reject。iframe 内主动发 `game:ready` 请求 hello(解决加载时序竞争),默认 1500ms 超时进入 standalone;`window.parent === window`(非 iframe)直接 standalone
+- `connectGameDock(options?)`:与平台握手,永不 reject。iframe 内主动发 `game:ready` 请求 hello(解决加载时序竞争),默认 1500ms 超时进入 standalone;`window.parent === window`(非 iframe)直接 standalone
 - 握手成功暴露:`user`(登录用户或 null)、`slug`(来自 hello)、`onPlatformMessage`(收 `platform:` 消息,校验信封+来源)、`send`(发 `game:` 消息自动补 v)
-- `saves.list/get/put/remove`:封装 `/api/saves/<slug>/...`,`credentials: same-origin`;`get` 404 返回 null,其余非 2xx 抛 `XlpApiError`(带 status,文案为服务端原文);key 客户端先行校验
-- standalone 模式:saves 方法异步抛 `XlpError`(必须是 async 抛,同步 throw 会绕过 await 链——测试抓到的坑)
+- `saves.list/get/put/remove`:封装 `/api/saves/<slug>/...`,`credentials: same-origin`;`get` 404 返回 null,其余非 2xx 抛 `GameDockApiError`(带 status,文案为服务端原文);key 客户端先行校验
+- standalone 模式:saves 方法异步抛 `GameDockError`(必须是 async 抛,同步 throw 会绕过 await 链——测试抓到的坑)
 - 测试:node:test + tsx + env 完整注入(不触碰浏览器全局),8 个测试全过(握手/超时/存档读写/非法 key/消息通道)
 
 **平台侧配合改动**:
@@ -65,7 +84,7 @@
 
 **tether 接入**(首款落地游戏):
 
-- `@xlp/game-sdk` 以 `file:` 依赖引入;main.ts 启动即 `connectXlp()`,standalone(独立 dev)行为完全不变
+- `@gamedock/game-sdk` 以 `file:` 依赖引入;main.ts 启动即 `connectGameDock()`,standalone(独立 dev)行为完全不变
 - 新增平台存档 key `progress`:`{ lastLevel, completed[] }`;启动恢复上次选关,选关/通关时写回;standalone 或读档失败静默降级(console.warn)
 
 ### 验证
@@ -76,7 +95,7 @@
 
 ### 契约备忘
 
-- 游戏接平台 = 安装 `@xlp/game-sdk` + `connectXlp()`,不直接拼 `/api` URL、不自己写 postMessage
+- 游戏接平台 = 安装 `@gamedock/game-sdk` + `connectGameDock()`,不直接拼 `/api` URL、不自己写 postMessage
 - hello 消息带 slug/user;存档值格式由游戏自定义(平台不解析)
 - 中转客户端(联机凭证/对战管道)将作为 SDK 下一个能力加在同一连接上
 
@@ -102,7 +121,7 @@
 ### 契约备忘
 
 - 游戏 iframe 内**不用 localStorage**(存档约定见 2026-11-16(一)),统一走平台存档 API;游戏本地 localStorage 只可作缓存
-- SDK `@xlp/game-sdk` 将封装此 API(fetch + 同域 Cookie 自动携带),游戏不直接拼 URL
+- SDK `@gamedock/game-sdk` 将封装此 API(fetch + 同域 Cookie 自动携带),游戏不直接拼 URL
 
 ## 2026-11-16(二):账号体系 + 好友
 
@@ -114,7 +133,7 @@
 - 好友:`GET /api/friends`、`POST /api/friends/requests`、`POST /api/friends/requests/:id/accept|decline`、`DELETE /api/friends/requests/:id`(取消)、`DELETE /api/friends/:id`(解除);全部要求登录(401)
 - 密码:Node 内置 scrypt + 随机盐 + timingSafeEqual(`server/password.mjs`;生产可换 argon2,调用方不变)
 - 会话:HMAC 无状态 Cookie(`server/session.mjs`),`HttpOnly + SameSite=Lax`,30 天,https 自动加 `Secure`;密钥自动生成落盘 `server/data/session-secret.key`(0600)
-- 存储:JSON 文件原子写(`server/db.mjs`),`server/data/` 已 gitignore,`XLP_DATA_DIR` 可改址
+- 存储:JSON 文件原子写(`server/db.mjs`),`server/data/` 已 gitignore,`GAMEDOCK_DATA_DIR` 可改址(更名前为 `XLP_DATA_DIR`)
 - 服务入口重构为 `createApp(config)`(`server/index.mjs`),集成测试可在临时端口/临时数据目录启动
 
 **前端**:
@@ -170,6 +189,6 @@
 ## 后续路线(已与用户对齐)
 
 1. **平台存档 API**(账号已就绪,存档挂 userId)
-2. **游戏侧 SDK `@xlp/game-sdk`**(封装 postMessage 桥 + 中转客户端,先在 tether 落地验证再迁 bvn)
+2. **游戏侧 SDK `@gamedock/game-sdk`**(封装 postMessage 桥 + 中转客户端,先在 tether 落地验证再迁 bvn)
 3. **平台通用对战中转**(方案 A:字节管道信封 `{t, ch, payload}`;HMAC 短时效凭证含 `roomId/playerId/role(host|guest|spectator)/exp`;中转验签不查库;通道 ch 作为平台限流策略单位;tether 的 `room-server.ts` 与 bvn 的 `room-server.mjs` 房间管理部分迁平台,游戏语义留游戏侧)
 4. 3D 据点场景(推后,当前阶段不作为目标)

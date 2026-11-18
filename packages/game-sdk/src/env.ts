@@ -1,4 +1,4 @@
-export interface XlpEnv {
+export interface GameDockEnv {
   parentWindow: Window | null;
   selfWindow: Window;
   fetchImpl: typeof fetch;
@@ -7,7 +7,7 @@ export interface XlpEnv {
   WebSocketImpl: typeof WebSocket;
 }
 
-export function defaultEnv(): XlpEnv {
+export function defaultEnv(): GameDockEnv {
   const selfWindow = window;
   return {
     parentWindow: selfWindow.parent === selfWindow ? null : selfWindow.parent,

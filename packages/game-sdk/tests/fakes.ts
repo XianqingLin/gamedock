@@ -1,4 +1,4 @@
-import type { GameMessage, PlatformHelloMessage, XlpEnv } from '../src/index';
+import type { GameMessage, PlatformHelloMessage, GameDockEnv } from '../src/index';
 
 /** 最小 Window 替身:捕获 message 监听器,可手动注入事件。 */
 export class FakeWindow {
@@ -103,7 +103,7 @@ export class FakeWebSocket {
 }
 
 export function helloMessage(user: PlatformHelloMessage['user'] = null): PlatformHelloMessage {
-  return { v: 1, t: 'platform:hello', platform: 'xiao-lin-game-shop', slug: 'tether-together', user };
+  return { v: 1, t: 'platform:hello', platform: 'gamedock', slug: 'tether-together', user };
 }
 
 export function makeEnv(
@@ -112,7 +112,7 @@ export function makeEnv(
   parent = new FakeWindow(),
   self = new FakeWindow(),
   webSocketImpl: typeof WebSocket = FakeWebSocket as unknown as typeof WebSocket,
-): XlpEnv {
+): GameDockEnv {
   return {
     parentWindow: parent as unknown as Window,
     selfWindow: self as unknown as Window,

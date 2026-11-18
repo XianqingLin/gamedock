@@ -13,7 +13,7 @@ const renderApp = (initialEntries: string[] = ['/']) =>
 describe('首页浏览', () => {
   it('展示全部游戏卡片与品牌名', () => {
     renderApp();
-    expect(screen.getByText('小林游戏铺')).toBeInTheDocument();
+    expect(screen.getByText('GameDock')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /死神 VS 火影 重构版/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /默契行动/ })).toBeInTheDocument();
   });
@@ -80,7 +80,7 @@ describe('详情页', () => {
   it('Escape 退出详情：无浏览历史时回首页', () => {
     renderApp(['/games/tether-together']);
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.getByText('小林游戏铺')).toBeInTheDocument();
+    expect(screen.getByText('GameDock')).toBeInTheDocument();
   });
 });
 
@@ -104,6 +104,6 @@ describe('路由未找到', () => {
     renderApp(['/no/such/page']);
     expect(screen.getByText('页面不存在')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: '返回首页' }));
-    expect(screen.getByText('小林游戏铺')).toBeInTheDocument();
+    expect(screen.getByText('GameDock')).toBeInTheDocument();
   });
 });

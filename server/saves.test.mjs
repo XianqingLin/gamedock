@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createApp } from './index.mjs';
 
 // 临时数据目录,避免污染真实 server/data。
-const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xlp-saves-test-'));
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gamedock-saves-test-'));
 const config = {
   port: 0,
   platformDistDir: path.join(dataDir, 'unused-dist'),

@@ -1,10 +1,10 @@
-import { XlpError } from './errors';
+import { GameDockError } from './errors';
 import { requestPlatform } from './http';
-import type { XlpEnv } from './env';
+import type { GameDockEnv } from './env';
 
 /**
  * 平台房间 + 对战中转客户端。
- * 服务端契约见 xiao-lin-game-shop/server/relay.mjs:
+ * 服务端契约见 gamedock/server/relay.mjs:
  * - 信封 { v, t, ch?, payload? };数据消息 t='data' 必须带通道 ch 与 JSON payload;
  * - 控制事件:ready / peer-joined / peer-left / peer-reconnected / room-closed / error;
  * - 断线后可用同一凭证重连(重连窗口内),ready.reconnected=true 表示重连。
@@ -63,7 +63,7 @@ export interface RelayConnection {
   onEvent(handler: (event: { t: string } & Record<string, unknown>) => void): () => void;
   /** 连接关闭(含服务端踢出/解散)。 */
   onStatus(handler: (status: RelayStatus, detail: RelayCloseInfo | null) => void): () => void;
-  /** 向其他成员发数据(连接未就绪抛 XlpError)。 */
+  /** 向其他成员发数据(连接未就绪抛 GameDockError)。 */
   send(ch: string, payload: unknown): void;
   /** 主动离开房间(服务端移除槽位并广播)。 */
   leave(): void;
@@ -73,9 +73,9 @@ export interface RelayConnection {
 
 // ---------- 房间 REST ----------
 
-export function createRoomsApi(env: XlpEnv, slug: string | null) {
+export function createRoomsApi(env: GameDockEnv, slug: string | null) {
   const assertAvailable = () => {
-    if (!slug) throw new XlpError('未在平台内运行,房间功能不可用');
+    if (!slug) throw new GameDockError('未在平台内运行,房间功能不可用');
   };
   return {
     /** 创建房间(本游戏);返回 host 凭证。 */
@@ -90,7 +90,7 @@ export function createRoomsApi(env: XlpEnv, slug: string | null) {
     /** 按房间码加入;返回对应角色的凭证;已在房间内则幂等重入。 */
     async join(code: string, options: { asSpectator?: boolean } = {}): Promise<RoomWithCredential> {
       assertAvailable();
-      if (!/^\d{6}$/.test(code)) throw new XlpError('房间码需为 6 位数字');
+      if (!/^\d{6}$/.test(code)) throw new GameDockError('房间码需为 6 位数字');
       const data = await requestPlatform(env, 'POST', '/api/rooms/join', {
         code,
         asSpectator: options.asSpectator,
@@ -129,9 +129,9 @@ function relayUrl(origin: string): string {
   return `${origin.replace(/^http/, 'ws')}/api/relay`;
 }
 
-export function createRelayConnection(env: XlpEnv, credential: string): RelayConnection {
+export function createRelayConnection(env: GameDockEnv, credential: string): RelayConnection {
   const WebSocketImpl = env.WebSocketImpl;
-  if (!WebSocketImpl) throw new XlpError('环境缺少 WebSocket 支持');
+  if (!WebSocketImpl) throw new GameDockError('环境缺少 WebSocket 支持');
 
   const handlers = {
     data: new Set<(m: RelayDataMessage) => void>(),
@@ -269,9 +269,9 @@ export function createRelayConnection(env: XlpEnv, credential: string): RelayCon
       return () => handlers.status.delete(handler);
     },
     send(ch, payload) {
-      if (state.status !== 'open') throw new XlpError('中转连接未就绪');
-      if (typeof ch !== 'string' || !CHANNEL_RE.test(ch)) throw new XlpError(`非法通道 ch:${ch}`);
-      if (payload === undefined) throw new XlpError('payload 不能为 undefined');
+      if (state.status !== 'open') throw new GameDockError('中转连接未就绪');
+      if (typeof ch !== 'string' || !CHANNEL_RE.test(ch)) throw new GameDockError(`非法通道 ch:${ch}`);
+      if (payload === undefined) throw new GameDockError('payload 不能为 undefined');
       socket.send(JSON.stringify({ v: ENVELOPE_VERSION, t: 'data', ch, payload }));
     },
     leave() {

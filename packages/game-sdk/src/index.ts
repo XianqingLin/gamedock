@@ -1,7 +1,7 @@
 /**
- * 小林游戏铺游戏侧 SDK v1。
+ * GameDock游戏侧 SDK v1。
  *
- * 游戏通过 connectXlp() 与平台握手,获得:
+ * 游戏通过 connectGameDock() 与平台握手,获得:
  * - 当前游戏 slug 与登录用户(来自 platform:hello)
  * - 存档 API(saves.*):平台 /api/saves 的封装
  * - 房间 + 对战中转(rooms.* / relay.*):平台房间 REST 与 /api/relay WS 的封装
@@ -9,18 +9,18 @@
  *
  * 游戏 iframe 内不要用 localStorage 做持久化,统一走 saves。
  * 未在平台内运行(独立开发调试)时 SDK 进入 standalone 模式:握手字段为空,
- * rooms/relay/saves 调用异步抛 XlpError,游戏自身逻辑不受影响。
+ * rooms/relay/saves 调用异步抛 GameDockError,游戏自身逻辑不受影响。
  */
 
-import { XlpApiError, XlpError } from './errors';
+import { GameDockApiError, GameDockError } from './errors';
 import { defaultEnv } from './env';
 import { requestPlatform } from './http';
 import { createRelayConnection, createRoomsApi } from './relay';
 import type { RoomsApi, RelayConnection } from './relay';
-import type { XlpEnv } from './env';
+import type { GameDockEnv } from './env';
 
-export type { XlpEnv };
-export { XlpError, XlpApiError };
+export type { GameDockEnv };
+export { GameDockError, GameDockApiError };
 export type { RoomsApi };
 export {
   createRoomsApi,
@@ -77,7 +77,7 @@ export interface SaveWriteResult {
 export interface SavesApi {
   /** 列出当前游戏全部槽位元数据(按更新时间倒序)。 */
   list(): Promise<SaveSlotMeta[]>;
-  /** 读取槽位;不存在返回 null(其余错误抛 XlpApiError)。 */
+  /** 读取槽位;不存在返回 null(其余错误抛 GameDockApiError)。 */
   get<T = unknown>(key: string): Promise<SaveReadResult<T> | null>;
   /** 写入槽位(值须可 JSON 序列化,单槽上限 256KB);last-write-wins。 */
   put<T = unknown>(key: string, value: T): Promise<SaveWriteResult>;
@@ -85,7 +85,7 @@ export interface SavesApi {
   remove(key: string): Promise<void>;
 }
 
-export interface XlpSdk {
+export interface GameDockSdk {
   /** 已登录用户;未登录或 standalone 为 null。 */
   readonly user: PlatformUser | null;
   /** 当前游戏 slug(来自 hello);standalone 为 null。 */
@@ -109,9 +109,9 @@ export interface ConnectOptions {
   helloTimeoutMs?: number;
   /**
    * 环境完整注入(仅测试用):不传则取 window / fetch / WebSocket。
-   * 注入时必须是完整 XlpEnv,SDK 不会触碰任何浏览器全局。
+   * 注入时必须是完整 GameDockEnv,SDK 不会触碰任何浏览器全局。
    */
-  env?: XlpEnv;
+  env?: GameDockEnv;
 }
 
 const READY_MESSAGE: GameMessage = { v: PROTOCOL_VERSION, t: 'game:ready' };
@@ -134,7 +134,7 @@ function isPlatformMessage(data: unknown): data is GameMessage {
 }
 
 /** 与平台握手并创建 SDK。永不 reject:握手失败按 standalone 处理。 */
-export async function connectXlp(options: ConnectOptions = {}): Promise<XlpSdk> {
+export async function connectGameDock(options: ConnectOptions = {}): Promise<GameDockSdk> {
   // env 完整注入时(仅测试)完全不触碰 window 等浏览器全局。
   const env = options.env ?? defaultEnv();
   const timeoutMs = options.helloTimeoutMs ?? 1500;
@@ -145,7 +145,7 @@ export async function connectXlp(options: ConnectOptions = {}): Promise<XlpSdk> 
   return createConnectedSdk(env, hello);
 }
 
-function waitForHello(env: XlpEnv, parent: Window, timeoutMs: number): Promise<PlatformHelloMessage | null> {
+function waitForHello(env: GameDockEnv, parent: Window, timeoutMs: number): Promise<PlatformHelloMessage | null> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (message: PlatformHelloMessage | null) => {
@@ -168,10 +168,10 @@ function waitForHello(env: XlpEnv, parent: Window, timeoutMs: number): Promise<P
   });
 }
 
-function createStandaloneSdk(): XlpSdk {
+function createStandaloneSdk(): GameDockSdk {
   // 必须是异步抛错:接口契约是返回 Promise,同步 throw 会绕过调用方的 await 链。
   const notAvailable = async () => {
-    throw new XlpError('未在平台内运行,该能力不可用');
+    throw new GameDockError('未在平台内运行,该能力不可用');
   };
   return {
     user: null,
@@ -185,7 +185,7 @@ function createStandaloneSdk(): XlpSdk {
   };
 }
 
-function createConnectedSdk(env: XlpEnv, hello: PlatformHelloMessage): XlpSdk {
+function createConnectedSdk(env: GameDockEnv, hello: PlatformHelloMessage): GameDockSdk {
   const handlers = new Set<(message: GameMessage) => void>();
 
   env.selfWindow.addEventListener('message', (event: MessageEvent) => {
@@ -196,7 +196,7 @@ function createConnectedSdk(env: XlpEnv, hello: PlatformHelloMessage): XlpSdk {
 
   const assertKey = (key: string) => {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(key)) {
-      throw new XlpError(`非法存档 key:${key}`);
+      throw new GameDockError(`非法存档 key:${key}`);
     }
   };
 
@@ -217,7 +217,7 @@ function createConnectedSdk(env: XlpEnv, hello: PlatformHelloMessage): XlpSdk {
       try {
         return (await savesRequest('GET', `/${key}`)) as unknown as SaveReadResult<T>;
       } catch (err) {
-        if (err instanceof XlpApiError && err.status === 404) return null;
+        if (err instanceof GameDockApiError && err.status === 404) return null;
         throw err;
       }
     },
@@ -254,7 +254,7 @@ function createConnectedSdk(env: XlpEnv, hello: PlatformHelloMessage): XlpSdk {
           const offStatus = connection.onStatus((status, detail) => {
             offStatus();
             if (status === 'open') resolve(connection);
-            else reject(new XlpError(`中转连接失败(${detail?.code ?? '未知'})`));
+            else reject(new GameDockError(`中转连接失败(${detail?.code ?? '未知'})`));
           });
         }),
     },

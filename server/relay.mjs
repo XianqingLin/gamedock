@@ -8,13 +8,16 @@ import { setPlayerConnected, roomView, sweepRooms } from './rooms.mjs';
  * - 信封:{ v, t, ch?, payload? };控制消息(ready、peer-joined、peer-left、room-closed、error)不带 ch,
  *   游戏数据 t='data' 必须带 ch(通道是将来限流策略的单位)与 payload(JSON)。
  * - 断线不清槽位:靠房间服务的重连窗口(rooms.mjs)与凭证(短时效)重连。
- * - 限流:每连接 50 msg/s(突发 100),超发丢弃,严重超发断开(4008)。
+ * - 限流:每连接 120 msg/s(突发 240,容纳 60Hz lockstep 追帧连发),超发丢弃,严重超发断开(4008)。
  */
 
 const HELLO_TIMEOUT_MS = 5 * 1000;
 const MAX_MESSAGE_BYTES = 64 * 1024;
-const RATE_PER_SECOND = 50;
-const RATE_BURST = 100;
+// lockstep 类游戏按 60 tick/s 每 tick 上行一条 input(60Hz 对局约 61 msg/s 含哈希),
+// 且停步等待后追帧会在单帧内连发积压的 input——限流必须给足余量,否则丢一条
+// input 对端就永久停步(lockstep 无重传)。120/s(突发 240)≈ 2 倍余量。
+const RATE_PER_SECOND = 120;
+const RATE_BURST = 240;
 const SWEEP_INTERVAL_MS = 15 * 1000;
 
 const CHANNEL_RE = /^[a-z0-9-]{1,16}$/;

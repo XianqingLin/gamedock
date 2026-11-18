@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
  * v1 不做服务端吊销(登出即清 Cookie);需要强制下线时再引入会话表。
  */
 
-export const SESSION_COOKIE = 'xlp_session';
+export const SESSION_COOKIE = 'gamedock_session';
 const MAX_AGE_SECONDS = 30 * 24 * 3600;
 
 function hmac(payload, secret) {

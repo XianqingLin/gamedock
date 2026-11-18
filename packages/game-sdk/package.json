@@ -1,7 +1,7 @@
 {
-  "name": "@xlp/game-sdk",
+  "name": "@gamedock/game-sdk",
   "version": "0.1.0",
-  "description": "小林游戏铺游戏侧 SDK:平台握手 + 存档 API 封装。平台内嵌游戏统一从此接入,不直接拼平台内部 URL。",
+  "description": "GameDock游戏侧 SDK:平台握手 + 存档 API 封装。平台内嵌游戏统一从此接入,不直接拼平台内部 URL。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
