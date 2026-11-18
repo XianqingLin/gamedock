@@ -17,13 +17,59 @@ const encoder = new TextEncoder();
 
 /**
  * 平台 HTTP API(Web 风格:Request 进 Response 出,Workers 与测试共用)。
- * env 形状:{ store, saves, sessionSecret, gameSlugs, gamesData }
+ * env 形状:{ store, saves, sessionSecret, gameSlugs, gamesData, gameOrigin }
  * - /api/auth/*:注册、登录、登出、当前用户(httpOnly Cookie 会话)
  * - /api/friends*:好友关系(需登录;首版无在线状态)
  * - /api/saves*:平台存档(需登录;slug 须为已接入游戏,值对平台不透明)
  * - /api/games、/api/health:公开
+ * - CORS:仅对游戏内容域(gameOrigin)与请求自身源开放,且允许携带凭据——
+ *   游戏跑在 games.gamedock.cn 的跨源 iframe 里,SDK 存档等调用需要 Cookie;
+ *   会话 Cookie 是 host-only + SameSite=Lax,与游戏域同站(eTLD+1 相同),
+ *   跨源请求仍会携带,因此 allowlist 必须收紧,不对任意第三方源开放。
  */
 export async function handleApi(request, env) {
+  const cors = corsHeadersFor(request, env);
+
+  if (request.method === 'OPTIONS') {
+    // 预检:仅 allowlist 内的源放行,其余视为不允许的跨源调用。
+    if (!cors) return sendJson(403, { error: '不允许的跨源来源' });
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...cors,
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '86400',
+      },
+    });
+  }
+
+  const response = await routeApi(request, env);
+  if (!cors) return response;
+  const withCors = new Response(response.body, response);
+  for (const [key, value] of Object.entries(cors)) withCors.headers.set(key, value);
+  return withCors;
+}
+
+/** allowlist:游戏内容域 + 请求自身源(平台 SPA 同源)。返回要附加的 CORS 头。 */
+function corsHeadersFor(request, env) {
+  const origin = request.headers.get('origin');
+  if (!origin) return null;
+  let self;
+  try {
+    self = new URL(request.url).origin;
+  } catch {
+    return null;
+  }
+  if (origin !== env.gameOrigin && origin !== self) return null;
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Credentials': 'true',
+    Vary: 'Origin',
+  };
+}
+
+async function routeApi(request, env) {
   let pathname;
   try {
     pathname = decodeURIComponent(new URL(request.url).pathname);

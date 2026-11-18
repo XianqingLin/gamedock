@@ -21,6 +21,11 @@ describe('resolveLaunch 启动解析', () => {
     expect(result).toEqual({ kind: 'internal', url: '/g/tether/index.html' });
   });
 
+  it('站内路径 + 注入游戏内容域 origin → 拼完整跨源地址(生产形态)', () => {
+    const result = resolveLaunch(makeGame({ launchUrl: '/g/bvn/index.html' }), 'https://games.gamedock.cn');
+    expect(result).toEqual({ kind: 'internal', url: 'https://games.gamedock.cn/g/bvn/index.html' });
+  });
+
   it('可用 + https 外链 → 新窗口启动', () => {
     const result = resolveLaunch(makeGame({ launchUrl: 'https://game.example.com/play' }));
     expect(result).toEqual({ kind: 'external', url: 'https://game.example.com/play' });

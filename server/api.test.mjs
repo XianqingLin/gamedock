@@ -17,6 +17,7 @@ const env = {
   sessionSecret: 'test-secret',
   gameSlugs: new Set(['bvn']),
   gamesData,
+  gameOrigin: 'https://games.gamedock.cn',
 };
 
 async function call(method, urlPath, { body, rawBody, cookie } = {}) {
@@ -180,5 +181,67 @@ describe('存档 HTTP 流程', () => {
     const res = await client.request('GET', '/api/saves/no-such');
     expect(res.status).toBe(404);
     expect(res.data.error).toBe('未接入该游戏');
+  });
+});
+
+describe('CORS(游戏内容域跨源访问)', () => {
+  async function callWithOrigin(origin, { method = 'GET', path = '/api/health' } = {}) {
+    const headers = {};
+    if (origin) headers.Origin = origin;
+    const response = await handleApi(new Request(`https://gamedock.test${path}`, { method, headers }), env);
+    return {
+      status: response.status,
+      acao: response.headers.get('Access-Control-Allow-Origin'),
+      credentials: response.headers.get('Access-Control-Allow-Credentials'),
+    };
+  }
+
+  it('游戏内容域来源 → 精确回显 Origin 并允许凭据', async () => {
+    const res = await callWithOrigin('https://games.gamedock.cn');
+    expect(res.status).toBe(200);
+    expect(res.acao).toBe('https://games.gamedock.cn');
+    expect(res.credentials).toBe('true');
+  });
+
+  it('自身来源(同源请求)→ 同样回显', async () => {
+    const res = await callWithOrigin('https://gamedock.test');
+    expect(res.acao).toBe('https://gamedock.test');
+  });
+
+  it('第三方来源 → 不带 CORS 头(读不到响应)', async () => {
+    const res = await callWithOrigin('https://evil.example.com');
+    expect(res.status).toBe(200);
+    expect(res.acao).toBeNull();
+    expect(res.credentials).toBeNull();
+  });
+
+  it('无 Origin 头 → 普通响应', async () => {
+    const res = await callWithOrigin(null);
+    expect(res.status).toBe(200);
+    expect(res.acao).toBeNull();
+  });
+
+  it('OPTIONS 预检:allowlist 来源 → 204 + 方法声明', async () => {
+    const res = await callWithOrigin('https://games.gamedock.cn', {
+      method: 'OPTIONS',
+      path: '/api/saves/bvn',
+    });
+    expect(res.status).toBe(204);
+    expect(res.acao).toBe('https://games.gamedock.cn');
+    expect(res.credentials).toBe('true');
+    const response = await handleApi(
+      new Request('https://gamedock.test/api/saves/bvn', {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://games.gamedock.cn' },
+      }),
+      env,
+    );
+    expect(response.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
+    expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Type');
+  });
+
+  it('OPTIONS 预检:第三方来源 → 403', async () => {
+    const res = await callWithOrigin('https://evil.example.com', { method: 'OPTIONS' });
+    expect(res.status).toBe(403);
   });
 });

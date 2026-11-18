@@ -8,13 +8,15 @@
   "compatibility_date": "2025-09-01",
   "routes": [
     { "pattern": "gamedock.cn", "custom_domain": true },
-    { "pattern": "www.gamedock.cn", "custom_domain": true }
+    { "pattern": "www.gamedock.cn", "custom_domain": true },
+    // 游戏内容域:游戏静态资源(R2),与平台跨源隔离;部署时自动创建 DNS 记录。
+    { "pattern": "games.gamedock.cn", "custom_domain": true }
   ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/g/*"]
   },
   "d1_databases": [
     {
@@ -27,6 +29,12 @@
     {
       "binding": "SAVES",
       "id": "78c8a7b855aa47a79b2da334ac40ec1d"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "GAMES",
+      "bucket_name": "gamedock-games"
     }
   ],
   "observability": {
