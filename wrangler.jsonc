@@ -16,13 +16,13 @@
     {
       "binding": "DB",
       "database_name": "gamedock",
-      "database_id": "TODO_D1_DATABASE_ID"
+      "database_id": "66fd8797-cc1d-4879-aea7-d0394695d113"
     }
   ],
   "kv_namespaces": [
     {
       "binding": "SAVES",
-      "id": "TODO_KV_NAMESPACE_ID"
+      "id": "78c8a7b855aa47a79b2da334ac40ec1d"
     }
   ],
   "observability": {
