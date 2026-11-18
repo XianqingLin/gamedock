@@ -6,6 +6,10 @@
   "name": "gamedock",
   "main": "server/worker.mjs",
   "compatibility_date": "2025-09-01",
+  "routes": [
+    { "pattern": "gamedock.cn", "custom_domain": true },
+    { "pattern": "www.gamedock.cn", "custom_domain": true }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
