@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ALL_CATEGORY, filterGames } from '../lib/browse';
 import { CATEGORIES, GAMES } from '../data';
+import { SiteHeader } from '../components/SiteHeader';
 import { SearchBar } from '../components/SearchBar';
-import { UserArea } from '../components/UserArea';
 import { CategoryFilter } from '../components/CategoryFilter';
 import { GameCard } from '../components/GameCard';
 import { EmptyState } from '../components/EmptyState';
@@ -42,53 +42,60 @@ export function HomePage() {
 
   return (
     <div className="page home-page">
-      <header className="home-header">
-        <div className="brand">
-          <h1 className="brand-zh">GameDock</h1>
-          <p className="brand-en">gamedock.cn</p>
-        </div>
-        <UserArea />
-      </header>
-
-      <div className="home-toolbar">
-        <SearchBar
-          value={input}
-          onChange={(value) => {
-            setInput(value);
-            updateParams(value, categoryId);
-          }}
-        />
-      </div>
-
-      <CategoryFilter
-        categories={CATEGORIES}
-        value={categoryId}
-        onChange={(id) => updateParams(query, id)}
-      />
+      <SiteHeader />
 
       <main className="home-main">
-        {GAMES.length === 0 ? (
-          <EmptyState title="暂无游戏数据" detail="平台还没有接入任何游戏。" />
-        ) : results.length === 0 ? (
-          <EmptyState
-            title="没有符合条件的游戏"
-            detail="试试其他关键词或分类。"
-            action={
-              <button type="button" className="btn btn-secondary" onClick={clearFilters}>
-                清除筛选
-              </button>
-            }
-          />
-        ) : (
-          <ul className="game-grid" aria-label="游戏列表">
-            {results.map((game) => (
-              <li key={game.id}>
-                <GameCard game={game} categories={CATEGORIES} />
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="catalog-heading">
+          <div className="catalog-title">
+            <h1>全部游戏</h1>
+            <span className="catalog-count">{results.length} 款游戏</span>
+          </div>
+          <div className="catalog-search">
+            <SearchBar
+              value={input}
+              onChange={(value) => {
+                setInput(value);
+                updateParams(value, categoryId);
+              }}
+            />
+          </div>
+        </div>
+
+        <CategoryFilter
+          categories={CATEGORIES}
+          value={categoryId}
+          onChange={(id) => updateParams(query, id)}
+        />
+
+        <section className="catalog-results" aria-label="游戏目录">
+          {GAMES.length === 0 ? (
+            <EmptyState title="暂无游戏数据" detail="平台还没有接入任何游戏。" />
+          ) : results.length === 0 ? (
+            <EmptyState
+              title="没有符合条件的游戏"
+              detail="试试其他关键词或分类。"
+              action={
+                <button type="button" className="btn btn-secondary" onClick={clearFilters}>
+                  清除筛选
+                </button>
+              }
+            />
+          ) : (
+            <ul className="game-grid" aria-label="游戏列表">
+              {results.map((game) => (
+                <li key={game.id}>
+                  <GameCard game={game} categories={CATEGORIES} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </main>
+
+      <footer className="site-footer">
+        <span>gamedock.cn</span>
+        <span>网页游戏平台</span>
+      </footer>
     </div>
   );
 }

@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
+import { SiteHeader } from '../components/SiteHeader';
 
 export function NotFoundPage() {
   return (
     <div className="page">
+      <SiteHeader />
       <main className="empty-wrap">
         <EmptyState
           title="页面不存在"

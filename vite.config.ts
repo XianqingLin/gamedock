@@ -10,7 +10,8 @@ export default defineConfig({
     // /api 需 ws:true:联机中转 WS(/api/relay)的 upgrade 也要转发,否则握手永久挂起。
     proxy: {
       '/api': { target: 'http://localhost:8787', ws: true },
-      '/g': 'http://localhost:8787',
+      // 只代理游戏静态资源，不能把前端详情路由 /games/:slug 也转给后端。
+      '^/g/': 'http://localhost:8787',
     },
   },
   test: {

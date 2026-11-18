@@ -144,9 +144,15 @@ const renderApp = (initialEntries: string[] = ['/']) =>
     </MemoryRouter>,
   );
 
+/** 通过右上角头像与名称打开用户菜单。 */
+async function openUserMenu(name = '游客') {
+  fireEvent.click(await screen.findByRole('button', { name }));
+}
+
 /** 打开注册弹窗并提交表单。 */
 async function registerViaUi(username: string, password: string) {
-  fireEvent.click(await screen.findByRole('button', { name: '注册' }));
+  await openUserMenu();
+  fireEvent.click(screen.getByRole('button', { name: '注册' }));
   const dialog = screen.getByRole('dialog', { name: '注册' });
   fireEvent.change(within(dialog).getByLabelText('用户名'), { target: { value: username } });
   fireEvent.change(within(dialog).getByLabelText('密码'), { target: { value: password } });
@@ -154,9 +160,13 @@ async function registerViaUi(username: string, password: string) {
 }
 
 describe('游客身份', () => {
-  it('显示登录与注册按钮', async () => {
+  it('默认显示游客头像与名称，菜单中提供登录和注册', async () => {
     renderApp();
-    expect(await screen.findByRole('button', { name: '登录' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '登录' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '注册' })).not.toBeInTheDocument();
+
+    await openUserMenu();
+    expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '注册' })).toBeInTheDocument();
   });
 
@@ -174,8 +184,20 @@ describe('游客身份', () => {
     expect(await screen.findByText('小林')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
+    await openUserMenu('小林');
     fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
-    expect(await screen.findByRole('button', { name: '登录' })).toBeInTheDocument();
+    await openUserMenu();
+    expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
+  });
+
+  it('已登录用户可以从头像菜单进入个人主页', async () => {
+    renderApp();
+    await registerViaUi('alice', 'secret66');
+    await openUserMenu('alice');
+
+    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
+    expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
+    expect(screen.getByText('加入时间')).toBeInTheDocument();
   });
 });
 
@@ -186,6 +208,7 @@ describe('好友面板', () => {
     await registerViaUi('alice', 'secret66');
     await screen.findByText('alice');
 
+    await openUserMenu('alice');
     fireEvent.click(screen.getByRole('button', { name: '好友' }));
     // 等待面板初始加载完成,避免提交按钮仍处于 busy 禁用状态
     await screen.findByText('还没有好友。通过上面的输入框发送好友请求吧。');
@@ -203,6 +226,7 @@ describe('好友面板', () => {
     await registerViaUi('alice', 'secret66');
     await screen.findByText('alice');
 
+    await openUserMenu('alice');
     fireEvent.click(screen.getByRole('button', { name: '好友' }));
     await screen.findByText('还没有好友。通过上面的输入框发送好友请求吧。');
     fireEvent.change(screen.getByRole('textbox', { name: '输入用户名添加好友' }), {
@@ -219,13 +243,15 @@ describe('好友面板', () => {
     renderApp();
 
     // 以 bob 身份登录
-    fireEvent.click(await screen.findByRole('button', { name: '登录' }));
+    await openUserMenu();
+    fireEvent.click(screen.getByRole('button', { name: '登录' }));
     const dialog = screen.getByRole('dialog', { name: '登录' });
     fireEvent.change(within(dialog).getByLabelText('用户名'), { target: { value: 'bob' } });
     fireEvent.change(within(dialog).getByLabelText('密码'), { target: { value: 'irrelevant' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '登录' }));
     await screen.findByText('bob');
 
+    await openUserMenu('bob');
     fireEvent.click(screen.getByRole('button', { name: '好友' }));
     expect(await screen.findByText('收到的请求')).toBeInTheDocument();
 
