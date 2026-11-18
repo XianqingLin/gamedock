@@ -1,7 +1,7 @@
 export type GameStatus = 'available' | 'coming-soon' | 'maintenance';
 
 export interface GameOnlineCapability {
-  mode: 'platform-relay' | 'self-hosted';
+  mode: 'platform' | 'self-hosted';
   maxPlayers: number;
   modes: string[];
 }

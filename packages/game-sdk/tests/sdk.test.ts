@@ -24,8 +24,6 @@ describe('connectGameDock 握手', () => {
     assert.equal(sdk.slug, null);
     assert.equal(sdk.user, null);
     await assert.rejects(() => sdk.saves.put('slot1', {}), GameDockError);
-    await assert.rejects(() => sdk.rooms.create(), GameDockError);
-    await assert.rejects(() => sdk.relay.connect('cred'), GameDockError);
   });
 
   it('平台应答 game:ready → 完成握手,拿到 slug 与用户', async () => {

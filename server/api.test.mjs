@@ -1,55 +1,53 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createApp } from './index.mjs';
+import { handleApi } from './api.mjs';
+import { createMemoryStore } from './store.mjs';
+import { createFsSaves } from './saves.mjs';
+import gamesData from '../src/data/games.json' with { type: 'json' };
 
-// 临时数据目录,避免污染真实 server/data。
+// 临时数据目录(存档落盘),避免污染真实目录。
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gamedock-test-'));
-const config = {
-  port: 0,
-  platformDistDir: path.join(dataDir, 'unused-dist'),
-  gamesDataFile: new URL('../src/data/games.json', `file://${process.cwd().replace(/\\/g, '/')}/`).pathname,
-  gameRoots: {},
-  dataDir,
-  dbFile: path.join(dataDir, 'db.json'),
+
+/** handler 直调环境:内存存储 + fs 存档(线上对应 D1 + KV,见 worker.mjs)。 */
+const env = {
+  store: createMemoryStore(),
+  saves: createFsSaves(dataDir),
   sessionSecret: 'test-secret',
+  gameSlugs: new Set(['bvn']),
+  gamesData,
 };
 
-const app = createApp(config);
-let baseUrl;
+async function call(method, urlPath, { body, rawBody, cookie } = {}) {
+  const request = new Request(`https://gamedock.test${urlPath}`, {
+    method,
+    headers: {
+      ...(body !== undefined || rawBody !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    body: rawBody !== undefined ? rawBody : body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const response = await handleApi(request, env);
+  const data = await response.json().catch(() => null);
+  return { status: response.status, data, setCookies: response.headers.getSetCookie() };
+}
 
-beforeAll(async () => {
-  await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
-  const { port } = app.address();
-  baseUrl = `http://127.0.0.1:${port}`;
-});
-
-afterAll(async () => {
-  await new Promise((resolve) => app.close(resolve));
-  fs.rmSync(dataDir, { recursive: true, force: true });
-});
-
-/** 极简 Cookie 会话客户端。 */
+/** 极简 Cookie 会话客户端(直调 handler,无网络)。 */
 function makeClient() {
-  const cookie = { value: '' };
+  const jar = { cookie: '' };
   return {
     async request(method, urlPath, body) {
-      const res = await fetch(`${baseUrl}${urlPath}`, {
-        method,
-        headers: {
-          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-          ...(cookie.value ? { Cookie: cookie.value } : {}),
-        },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
-      const setCookie = res.headers.get('set-cookie');
-      if (setCookie) cookie.value = setCookie.split(';')[0];
-      const data = await res.json().catch(() => null);
-      return { status: res.status, data };
+      const res = await call(method, urlPath, { body, cookie: jar.cookie });
+      if (res.setCookies.length) jar.cookie = res.setCookies[0].split(';')[0];
+      return { status: res.status, data: res.data };
     },
   };
 }
+
+afterAll(() => {
+  fs.rmSync(dataDir, { recursive: true, force: true });
+});
 
 describe('账号会话流程', () => {
   it('注册 → me → 登出 → 登录 → me', async () => {
@@ -86,11 +84,7 @@ describe('账号会话流程', () => {
     const badBody = await client.request('POST', '/api/auth/register', { username: 'x', password: '123' });
     expect(badBody.status).toBe(400);
 
-    const broken = await fetch(`${baseUrl}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: 'not-json',
-    });
+    const broken = await call('POST', '/api/auth/register', { rawBody: 'not-json' });
     expect(broken.status).toBe(400);
   });
 
@@ -154,14 +148,37 @@ describe('好友 HTTP 流程', () => {
   });
 });
 
-describe('静态与游戏资源', () => {
-  it('平台构建产物缺失时返回 503 提示', async () => {
-    const res = await fetch(`${baseUrl}/`);
-    expect(res.status).toBe(503);
+describe('存档 HTTP 流程', () => {
+  it('登录后写入/读取/列出/删除存档槽位', async () => {
+    const client = makeClient();
+    await client.request('POST', '/api/auth/register', { username: 'saver', password: 'secret66' });
+
+    const put = await client.request('PUT', '/api/saves/bvn/slot1', { value: { hp: 9 } });
+    expect(put.status).toBe(200);
+    expect(put.data.key).toBe('slot1');
+    expect(put.data.size).toBeGreaterThan(0);
+
+    const get = await client.request('GET', '/api/saves/bvn/slot1');
+    expect(get.status).toBe(200);
+    expect(get.data.value).toEqual({ hp: 9 });
+
+    const list = await client.request('GET', '/api/saves/bvn');
+    expect(list.status).toBe(200);
+    expect(list.data.slots.map((s) => s.key)).toEqual(['slot1']);
+
+    const del = await client.request('DELETE', '/api/saves/bvn/slot1');
+    expect(del.status).toBe(200);
+    expect((await client.request('GET', '/api/saves/bvn/slot1')).status).toBe(404);
   });
 
-  it('未接入的游戏 slug 返回 404', async () => {
-    const res = await fetch(`${baseUrl}/g/no-such/index.html`);
+  it('未接入的游戏 slug 返回 404,未登录返回 401', async () => {
+    const anon = makeClient();
+    expect((await anon.request('GET', '/api/saves/bvn')).status).toBe(401);
+
+    const client = makeClient();
+    await client.request('POST', '/api/auth/register', { username: 'slugcheck', password: 'secret66' });
+    const res = await client.request('GET', '/api/saves/no-such');
     expect(res.status).toBe(404);
+    expect(res.data.error).toBe('未接入该游戏');
   });
 });

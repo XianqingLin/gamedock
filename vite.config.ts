@@ -6,10 +6,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    // 游戏静态资源（/g/<slug>/...）与 API 转发给 Node 服务。
-    // /api 需 ws:true:联机中转 WS(/api/relay)的 upgrade 也要转发,否则握手永久挂起。
+    // 游戏静态资源（/g/<slug>/...）与 API 转发给后端服务。
     proxy: {
-      '/api': { target: 'http://localhost:8787', ws: true },
+      '/api': { target: 'http://localhost:8787' },
       // 只代理游戏静态资源，不能把前端详情路由 /games/:slug 也转给后端。
       '^/g/': 'http://localhost:8787',
     },

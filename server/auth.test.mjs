@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { registerUser, validateRegistration, verifyLogin, findUserByUsername } from './auth.mjs';
 import { hashPassword, verifyPassword } from './password.mjs';
-import { emptyDb } from './db.mjs';
+import { createMemoryStore } from './store.mjs';
 
 describe('validateRegistration 注册校验', () => {
   it('合法用户名:字母数字下划线中文,2-24 位', () => {
@@ -25,45 +25,45 @@ describe('validateRegistration 注册校验', () => {
 });
 
 describe('registerUser / verifyLogin', () => {
-  it('注册成功后可以用原密码登录', () => {
-    const db = emptyDb();
-    const reg = registerUser(db, { username: '小林', password: 'secret66' });
+  it('注册成功后可以用原密码登录', async () => {
+    const store = createMemoryStore();
+    const reg = await registerUser(store, { username: '小林', password: 'secret66' });
     expect(reg.ok).toBe(true);
     expect(reg.user.username).toBe('小林');
     // 哈希只存在内部记录上;对外暴露由 publicUser 投影保证(见 api.test.mjs 的响应字段)。
 
-    const login = verifyLogin(db, { username: '小林', password: 'secret66' });
+    const login = await verifyLogin(store, { username: '小林', password: 'secret66' });
     expect(login.ok).toBe(true);
     expect(login.user.id).toBe(reg.user.id);
   });
 
-  it('错误密码登录失败,错误信息不泄露用户是否存在', () => {
-    const db = emptyDb();
-    registerUser(db, { username: 'xiaolin', password: 'secret66' });
-    const wrong = verifyLogin(db, { username: 'xiaolin', password: 'wrong!' });
-    const missing = verifyLogin(db, { username: 'ghost', password: 'whatever' });
+  it('错误密码登录失败,错误信息不泄露用户是否存在', async () => {
+    const store = createMemoryStore();
+    await registerUser(store, { username: 'xiaolin', password: 'secret66' });
+    const wrong = await verifyLogin(store, { username: 'xiaolin', password: 'wrong!' });
+    const missing = await verifyLogin(store, { username: 'ghost', password: 'whatever' });
     expect(wrong.ok).toBe(false);
     expect(missing.ok).toBe(false);
     expect(wrong.error).toBe(missing.error);
   });
 
-  it('用户名不区分大小写唯一', () => {
-    const db = emptyDb();
-    registerUser(db, { username: 'PlayerOne', password: 'secret66' });
-    expect(findUserByUsername(db, 'playerone')).not.toBeNull();
-    const dup = registerUser(db, { username: 'playerone', password: 'secret66' });
+  it('用户名不区分大小写唯一', async () => {
+    const store = createMemoryStore();
+    await registerUser(store, { username: 'PlayerOne', password: 'secret66' });
+    expect(await findUserByUsername(store, 'playerone')).not.toBeNull();
+    const dup = await registerUser(store, { username: 'playerone', password: 'secret66' });
     expect(dup.ok).toBe(false);
     expect(dup.error).toBe('用户名已存在');
   });
 });
 
 describe('hashPassword / verifyPassword', () => {
-  it('相同密码不同盐,哈希不同;验证仅接受正确密码', () => {
-    const a = hashPassword('same-password');
-    const b = hashPassword('same-password');
+  it('相同密码不同盐,哈希不同;验证仅接受正确密码', async () => {
+    const a = await hashPassword('same-password');
+    const b = await hashPassword('same-password');
     expect(a.salt).not.toBe(b.salt);
     expect(a.hash).not.toBe(b.hash);
-    expect(verifyPassword('same-password', a.salt, a.hash)).toBe(true);
-    expect(verifyPassword('wrong-password', a.salt, a.hash)).toBe(false);
+    expect(await verifyPassword('same-password', a.salt, a.hash)).toBe(true);
+    expect(await verifyPassword('wrong-password', a.salt, a.hash)).toBe(false);
   });
 });

@@ -4,36 +4,20 @@
  * 游戏通过 connectGameDock() 与平台握手,获得:
  * - 当前游戏 slug 与登录用户(来自 platform:hello)
  * - 存档 API(saves.*):平台 /api/saves 的封装
- * - 房间 + 对战中转(rooms.* / relay.*):平台房间 REST 与 /api/relay WS 的封装
  * - postMessage 收发通道(平台层事件)
  *
  * 游戏 iframe 内不要用 localStorage 做持久化,统一走 saves。
  * 未在平台内运行(独立开发调试)时 SDK 进入 standalone 模式:握手字段为空,
- * rooms/relay/saves 调用异步抛 GameDockError,游戏自身逻辑不受影响。
+ * saves 调用异步抛 GameDockError,游戏自身逻辑不受影响。
  */
 
 import { GameDockApiError, GameDockError } from './errors';
 import { defaultEnv } from './env';
 import { requestPlatform } from './http';
-import { createRelayConnection, createRoomsApi } from './relay';
-import type { RoomsApi, RelayConnection } from './relay';
 import type { GameDockEnv } from './env';
 
 export type { GameDockEnv };
 export { GameDockError, GameDockApiError };
-export type { RoomsApi };
-export {
-  createRoomsApi,
-  createRelayConnection,
-  type RelayRole,
-  type RelayStatus,
-  type RelayPlayer,
-  type RoomView,
-  type RoomWithCredential,
-  type RelayDataMessage,
-  type RelayCloseInfo,
-  type RelayConnection,
-} from './relay';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -97,11 +81,6 @@ export interface GameDockSdk {
   /** 向平台发消息,自动补 v。 */
   send(message: { t: string } & Record<string, unknown>): void;
   readonly saves: SavesApi;
-  readonly rooms: RoomsApi;
-  /** 建立对战中转连接(凭证来自 rooms.create/join)。 */
-  relay: {
-    connect(credential: string): Promise<RelayConnection>;
-  };
 }
 
 export interface ConnectOptions {
@@ -180,8 +159,6 @@ function createStandaloneSdk(): GameDockSdk {
     onPlatformMessage: () => () => {},
     send: () => {},
     saves: { list: notAvailable, get: notAvailable, put: notAvailable, remove: notAvailable },
-    rooms: { create: notAvailable, join: notAvailable, leave: notAvailable, get: notAvailable },
-    relay: { connect: notAvailable },
   };
 }
 
@@ -245,18 +222,5 @@ function createConnectedSdk(env: GameDockEnv, hello: PlatformHelloMessage): Game
       env.parentWindow.postMessage(payload, '*');
     },
     saves,
-    rooms: createRoomsApi(env, hello.slug),
-    relay: {
-      /** 等到 ready 才 resolve;就绪前连接被关闭则 reject。 */
-      connect: (credential: string) =>
-        new Promise<RelayConnection>((resolve, reject) => {
-          const connection = createRelayConnection(env, credential);
-          const offStatus = connection.onStatus((status, detail) => {
-            offStatus();
-            if (status === 'open') resolve(connection);
-            else reject(new GameDockError(`中转连接失败(${detail?.code ?? '未知'})`));
-          });
-        }),
-    },
   };
 }

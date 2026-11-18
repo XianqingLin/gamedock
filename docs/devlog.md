@@ -2,6 +2,41 @@
 
 按时间倒序记录已完成的开发、关键决策与验证状态。**行为需求仍以 01/02 号文档为准**,本文件只做进度与决策追溯,新增条目写在最上方。
 
+## 2026-11-18（二）：接入 Cloudflare Workers + 删除 relay 残留
+
+### 决策
+
+- **relay/rooms 处置落定**:整体删除(此前"处置待定")。平台层不做联机的定位下不再保留方案 A 残留;需恢复从 git 历史找回(`docs/05-multiplayer-protocol.md` 待处置清单已同步)。
+- **部署目标**:Cloudflare Workers(对标边缘部署,免费额度足够个人项目)。本地开发从 Node http 服务器切换为 `wrangler dev`(本地模拟 D1/KV,与线上同代码路径)。
+- **存储选型**:用户/好友 → D1(SQLite,关系数据);玩家存档 → KV(键 `saves/<userId>/<slug>/<key>`,元数据放 KV metadata)。
+
+### 变更
+
+- **删除 relay/rooms**:`server/relay.mjs`、`rooms.mjs`、`relay-credential.mjs`、`relay.test.mjs`;SDK `src/relay.ts`、`tests/relay.test.ts` 及 index/env/fakes 中的 rooms/relay 导出;`ws`/`@types/ws` 依赖;vite proxy 的 `ws:true`;`src/lib/types.ts` 废弃字面量 `platform-relay` → `platform`。
+- **服务端 Workers 化**(纯 Web API,无 nodejs_compat 依赖):
+  - `server/worker.mjs`:Worker 入口,`/api/*` → handleApi,其余 → Static Assets(SPA 回退由 assets 配置承担)。
+  - `server/api.mjs`:Node req/res 风格重写为 `handleApi(Request, env) → Response`;存储经 env 注入。
+  - 存储接口双实现:`store.mjs`(内存,测试用) / `store-d1.mjs`(D1 线上);`saves.mjs`(fs,测试用) / `saves-kv.mjs`(KV 线上);共享校验在 `saves-shared.mjs`(零依赖,避免把 node:fs 拖进 Worker bundle)。
+  - 密码哈希 scrypt → **PBKDF2-SHA256**(10 万次迭代,Web Crypto),会话 HMAC 换 Web Crypto;**与旧存储格式不兼容,旧账号需重新注册**。
+  - `server/index.mjs`、`config.mjs`、`static.mjs`、`db.mjs` 退役删除;静态托管移交 Workers Static Assets;`/api/games` 游戏数据与 slug 白名单改为构建期 JSON 导入。
+- **配置与脚本**:`wrangler.jsonc`(assets + D1 + KV 绑定,`database_id`/KV id 待创建后回填);`server/schema.sql`(D1 建表);`scripts/copy-games.mjs`(构建时把 games.config.json 声明的游戏产物拷入 `dist/g/<slug>`);npm scripts 改为 `dev`(wrangler dev + vite)、`build`、`deploy`;`.dev.vars`(本地会话密钥,已 gitignore)与 `.wrangler/` 忽略。
+- **测试改造**:auth/friends/api/saves 四个测试文件改为存储接口 + handler 直调(Request→Response,无端口/网络);静态资源 503/404 断言移除(职责移交 Static Assets)。
+
+### 验证
+
+- 平台 73 项测试、SDK 8 项测试、tsc 全部通过;SDK 构建成功。
+- `wrangler dev`(本地 D1/KV)端到端验证:注册/登录(含错误密码与大小写重复注册拒绝)/me、好友请求-接受流程、存档写读列删、未接入 slug 404、平台根 200、SPA 回退 200、`/g/bvn` 静态资源托管。
+- 修复迁移中发现的 bug:D1 蛇形列名(`pass_salt` 等)未映射为业务侧驼峰,导致登录读库后验签失败、`me` 缺 `createdAt`;已在 `store-d1.mjs` 加 userFromRow 映射。
+
+### 部署待办(首次 deploy 前)
+
+1. `wrangler login`
+2. `wrangler d1 create gamedock` → 回填 `wrangler.jsonc` 的 `database_id`
+3. `wrangler kv namespace create SAVES` → 回填 KV `id`
+4. `wrangler d1 execute gamedock --remote --file server/schema.sql`
+5. `wrangler secret put GAMEDOCK_SESSION_SECRET`
+6. `npm run deploy`
+
 ## 2026-11-18：项目更名 GameDock（购入 gamedock.cn）
 
 ### 变更

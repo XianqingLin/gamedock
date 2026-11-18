@@ -26,9 +26,9 @@
 
 ## 待处置
 
-按方案 A 已落地的代码仍在仓库中，处置（回退 / 保留改造为游戏侧组件 / 归档）待定：
+按方案 A 已落地的代码，处置（回退 / 保留改造为游戏侧组件 / 归档）待定：
 
-- 平台：`server/rooms.mjs`、`server/relay.mjs`、`server/relay-credential.mjs`，SDK 的 `sdk.rooms.*` / `sdk.relay.*`（改名前称 `xlp.rooms.*` / `xlp.relay.*`）。
+- 平台侧（2026-11-18 已随 Cloudflare Workers 迁移删除）：`server/rooms.mjs`、`server/relay.mjs`、`server/relay-credential.mjs`，SDK 的 `sdk.rooms.*` / `sdk.relay.*`（改名前称 `xlp.rooms.*` / `xlp.relay.*`）——如需恢复，从 git 历史找回。
 - web-bvn：`packages/net/platform.ts`（RelaySocket 适配层）与 app 接线的平台入房改造。
 - web-tether-together：`net/client.ts` 的 NetSession 平台化改造（其自托管 server 已删）。
 

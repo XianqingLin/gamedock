@@ -41,67 +41,6 @@ export class FakeFetch {
   };
 }
 
-/** 最小 WebSocket 替身:记录发出的消息,测试可手动 open/receive/close。 */
-export class FakeWebSocket {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
-  readonly CONNECTING = 0;
-  readonly OPEN = 1;
-  readonly CLOSING = 2;
-  readonly CLOSED = 3;
-
-  static instances: FakeWebSocket[] = [];
-
-  readyState = FakeWebSocket.CONNECTING;
-  readonly sent: string[] = [];
-  private listeners = new Map<string, Set<(event: unknown) => void>>();
-
-  constructor(readonly url: string) {
-    FakeWebSocket.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: (event: unknown) => void) {
-    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
-    this.listeners.get(type)!.add(listener);
-  }
-
-  removeEventListener(type: string, listener: (event: unknown) => void) {
-    this.listeners.get(type)?.delete(listener);
-  }
-
-  send(data: string) {
-    this.sent.push(data);
-  }
-
-  close(code = 1000, reason = '') {
-    if (this.readyState >= FakeWebSocket.CLOSING) return;
-    this.readyState = FakeWebSocket.CLOSED;
-    this.fire('close', { code, reason });
-  }
-
-  /** 测试驱动:模拟连接建立。 */
-  open() {
-    this.readyState = FakeWebSocket.OPEN;
-    this.fire('open', {});
-  }
-
-  /** 测试驱动:模拟服务端来消息。 */
-  receive(envelope: Record<string, unknown>) {
-    this.fire('message', { data: JSON.stringify(envelope) });
-  }
-
-  /** 测试视角:取本连接发出的第 n 条 JSON 信封。 */
-  sentAt(index: number): Record<string, unknown> {
-    return JSON.parse(this.sent[index]!);
-  }
-
-  private fire(type: string, event: unknown) {
-    for (const listener of this.listeners.get(type) ?? []) listener(event);
-  }
-}
-
 export function helloMessage(user: PlatformHelloMessage['user'] = null): PlatformHelloMessage {
   return { v: 1, t: 'platform:hello', platform: 'gamedock', slug: 'tether-together', user };
 }
@@ -111,14 +50,12 @@ export function makeEnv(
   fetcher: FakeFetch,
   parent = new FakeWindow(),
   self = new FakeWindow(),
-  webSocketImpl: typeof WebSocket = FakeWebSocket as unknown as typeof WebSocket,
 ): GameDockEnv {
   return {
     parentWindow: parent as unknown as Window,
     selfWindow: self as unknown as Window,
     fetchImpl: fetcher.impl,
     origin: 'https://platform.test',
-    WebSocketImpl: webSocketImpl,
   };
 }
 

@@ -1,25 +1,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { SEGMENT_RE, MAX_SLOTS_PER_GAME, DEFAULT_VALUE_LIMIT, fail, validSegment } from './saves-shared.mjs';
 
 /**
- * 平台存档:按 (userId, slug, key) 存 JSON 值,文件落盘在 savesDir 下,
- * 不进 db.json(存档体积大、重写频繁)。值对平台不透明,格式由游戏自定义。
- * 用户隔离靠目录结构(路径三段均经校验,无穿越风险),last-write-wins。
+ * 平台存档(fs 实现):按 (userId, slug, key) 存 JSON 值,文件落盘在 savesDir 下。
+ * 值对平台不透明,格式由游戏自定义;last-write-wins。
+ * 用户隔离靠路径段校验(三段均检查,无穿越风险)。
+ * 接口同 store.mjs 风格;线上 KV 实现见 saves-kv.mjs。
  */
-
-const SEGMENT_RE = /^[a-zA-Z0-9_-]{1,64}$/;
-const MAX_SLOTS_PER_GAME = 20;
-const DEFAULT_VALUE_LIMIT = 256 * 1024;
-
-const fail = (error) => ({ ok: false, error });
-
-/** 校验路径段(userId/slug/key 共用),杜绝目录穿越。 */
-function validSegment(segment) {
-  return typeof segment === 'string' && SEGMENT_RE.test(segment);
-}
 
 function slotFile(savesDir, userId, slug, key) {
   return path.join(savesDir, userId, slug, `${key}.json`);
+}
+
+/** fs 实现工厂:产出与 saves-kv.mjs 相同形状的 saves 接口(测试/本地用)。 */
+export function createFsSaves(savesDir) {
+  return {
+    listSaves: (userId, slug) => listSaves(savesDir, userId, slug),
+    readSave: (userId, slug, key) => readSave(savesDir, userId, slug, key),
+    writeSave: (userId, slug, key, value, options) => writeSave(savesDir, userId, slug, key, value, options),
+    deleteSave: (userId, slug, key) => deleteSave(savesDir, userId, slug, key),
+  };
 }
 
 function readSlot(file) {
