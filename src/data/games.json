@@ -9,6 +9,8 @@
       "fighting",
       "action"
     ],
+    "topic": "classic-remake",
+    "releaseDate": "2025-06-18",
     "description": "死神与火影角色同场竞技的 2D 格斗游戏重构版，基于确定性帧同步引擎开发。",
     "launchUrl": "/g/bvn/index.html",
     "status": "available",
@@ -36,6 +38,7 @@
       "co-op",
       "platformer"
     ],
+    "releaseDate": "2025-10-09",
     "description": "两名角色由绳索连接的双人合作平台游戏，支持本地双人、单人双控与在线合作。",
     "launchUrl": "/g/tether-together/index.html",
     "status": "available",

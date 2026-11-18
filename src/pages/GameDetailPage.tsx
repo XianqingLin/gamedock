@@ -10,8 +10,8 @@ import { SiteHeader } from '../components/SiteHeader';
 
 /**
  * 游戏详情页（/games/:slug）：可直接访问、刷新恢复、支持前进/后退。
- * Escape 或“返回浏览”退出详情：有历史时后退，直接打开详情 URL 时回首页；
- * 可选字段（版本/更新时间/简介）没有数据时不渲染。
+ * 页内不设返回按钮，退出详情走顶栏返回按钮或 Escape：有历史时后退，
+ * 直接打开详情 URL 时回浏览页；可选字段（版本/更新时间/简介）没有数据时不渲染。
  */
 export function GameDetailPage() {
   const { slug } = useParams();
@@ -21,7 +21,7 @@ export function GameDetailPage() {
   const goBack = useCallback(() => {
     const idx = Number((window.history.state as { idx?: number } | null)?.idx ?? 0);
     if (idx > 0) navigate(-1);
-    else navigate('/', { replace: true });
+    else navigate('/browse', { replace: true });
   }, [navigate]);
 
   useEffect(() => {
@@ -68,13 +68,6 @@ export function GameDetailPage() {
     <div className="page detail-page">
       <SiteHeader />
       <main className="detail-main">
-        <button type="button" className="back-button" onClick={goBack}>
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="m14.5 5-7 7 7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          返回浏览
-        </button>
-
         <div className="detail-layout">
           <section className="detail-info">
             {categoryLabels && <p className="detail-categories">{categoryLabels}</p>}

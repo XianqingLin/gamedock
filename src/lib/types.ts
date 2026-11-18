@@ -21,6 +21,10 @@ export interface Game {
   cover: string;
   accentColor: string;
   categories: string[];
+  /** 专题标签（单值，见 data/topics.json），缺省表示不属于任何专题。 */
+  topic?: string;
+  /** 发布日期（ISO 日期），驱动“最新推出 / 即将推出”排序；缺省视为已发布但日期未知。 */
+  releaseDate?: string;
   description?: string;
   launchUrl?: string;
   status: GameStatus;
@@ -31,6 +35,11 @@ export interface Game {
 }
 
 export interface Category {
+  id: string;
+  label: string;
+}
+
+export interface Topic {
   id: string;
   label: string;
 }

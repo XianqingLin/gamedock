@@ -3,11 +3,10 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../state/auth';
 import { AuthDialog } from './AuthDialog';
 import type { AuthMode } from './AuthDialog';
-import { FriendsPanel } from './FriendsPanel';
 
-type Dialog = AuthMode | 'friends' | null;
+type Dialog = AuthMode | null;
 
-/** 头部用户入口：游客默认浏览，头像与名称共同触发用户菜单。 */
+/** 顶栏账号区：头像与名称共同触发用户菜单。 */
 export function UserArea() {
   const { status, user, logout } = useAuth();
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -83,20 +82,17 @@ export function UserArea() {
         <div className="user-dropdown" id={menuId} role="group" aria-label="用户操作">
           {isUser ? (
             <>
-              <Link className="user-menu-item" to="/profile" onClick={() => setMenuOpen(false)}>
+              <Link
+                className="user-menu-item"
+                to="/profile"
+                onClick={() => setMenuOpen(false)}
+              >
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5" />
                   <path d="M5 20c.5-4.3 2.8-6.5 7-6.5s6.5 2.2 7 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
                 个人主页
               </Link>
-              <button type="button" className="user-menu-item" onClick={() => openDialog('friends')}>
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M3.5 19c.4-3.8 2.2-5.7 5.5-5.7s5.1 1.9 5.5 5.7M16 5.5a3 3 0 0 1 0 5.8M17 13.7c2.2.5 3.3 2.3 3.5 5.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                好友
-              </button>
               <div className="user-menu-divider" />
               <button
                 type="button"
@@ -137,7 +133,6 @@ export function UserArea() {
           onSwitchMode={(mode) => setDialog(mode)}
         />
       )}
-      {dialog === 'friends' && <FriendsPanel onClose={() => setDialog(null)} />}
     </div>
   );
 }

@@ -5,6 +5,7 @@ interface ModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  variant?: 'dialog' | 'drawer';
 }
 
 const FOCUSABLE_SELECTOR =
@@ -14,7 +15,7 @@ const FOCUSABLE_SELECTOR =
  * 通用模态弹层:焦点移入并圈定在弹层内,Escape 关闭,
  * 关闭后焦点恢复到原入口(产品需求 6.2)。
  */
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({ title, onClose, children, variant = 'dialog' }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
@@ -62,12 +63,18 @@ export function Modal({ title, onClose, children }: ModalProps) {
 
   return (
     <div
-      className="modal-overlay"
+      className={`modal-overlay${variant === 'drawer' ? ' drawer-overlay' : ''}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} ref={dialogRef}>
+      <div
+        className={`modal${variant === 'drawer' ? ' social-drawer' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        ref={dialogRef}
+      >
         <header className="modal-header">
           <h2 className="modal-title">{title}</h2>
           <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="关闭弹窗">

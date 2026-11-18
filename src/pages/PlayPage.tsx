@@ -4,10 +4,11 @@ import { findBySlug } from '../lib/browse';
 import { resolveLaunch } from '../lib/launch';
 import { DISABLED_LABELS, STATUS_LABELS } from '../lib/types';
 import { GAMES } from '../data';
-import { UserArea } from '../components/UserArea';
 import { GameFrame } from '../components/GameFrame';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../state/auth';
+import { SocialEntry } from '../components/SocialEntry';
+import { UserArea } from '../components/UserArea';
 
 /**
  * 游戏运行页（/play/:slug）：平台外边框 + 游戏 iframe。
@@ -115,7 +116,10 @@ export function PlayPage() {
           ← 返回
         </button>
         <h1 className="play-title">{game.title}</h1>
-        <UserArea />
+        <div className="play-account-actions">
+          <SocialEntry />
+          <UserArea />
+        </div>
         <button type="button" className="btn btn-secondary" onClick={toggleFullscreen}>
           {isFullscreen ? '退出全屏' : '全屏'}
         </button>
