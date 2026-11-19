@@ -133,4 +133,24 @@ describe('postMessage 通道', () => {
     self.dispatch({ v: 1, t: 'platform:after-off' }, parent);
     assert.deepEqual(received.map((m) => m.t), ['platform:match-found']);
   });
+
+  it('reportViewport 发送 game:viewport 载荷;standalone 下为 no-op', async () => {
+    const parent = new FakeWindow();
+    const self = new FakeWindow();
+    autoReplyPlatform(parent, helloMessage(), self);
+    const sdk = await connectGameDock({ env: makeEnv_(helloMessage(), new FakeFetch(() => new Response('{}')), parent, self) });
+
+    sdk.reportViewport(1000, 600);
+    const sent = parent.sent.at(-1)!.message as GameMessage;
+    assert.equal(sent.v, 1);
+    assert.equal(sent.t, 'game:viewport');
+    assert.equal(sent.width, 1000);
+    assert.equal(sent.height, 600);
+
+    const standalone = await connectGameDock({
+      env: makeEnv_(helloMessage(), new FakeFetch(() => new Response('{}'))),
+      helloTimeoutMs: 30,
+    });
+    assert.doesNotThrow(() => standalone.reportViewport(1000, 600));
+  });
 });

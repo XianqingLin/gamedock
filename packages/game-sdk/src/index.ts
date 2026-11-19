@@ -80,6 +80,12 @@ export interface GameDockSdk {
   onPlatformMessage(handler: (message: GameMessage) => void): () => void;
   /** 向平台发消息,自动补 v。 */
   send(message: { t: string } & Record<string, unknown>): void;
+  /**
+   * 上报游戏画面尺寸(逻辑分辨率,如舞台/画布的固定宽高)。
+   * 平台据此以信箱式布局限制 iframe 比例,消除固定比例游戏周围的空白割裂。
+   * 可随布局变化重复调用;standalone 下为 no-op。
+   */
+  reportViewport(width: number, height: number): void;
   readonly saves: SavesApi;
 }
 
@@ -158,6 +164,7 @@ function createStandaloneSdk(): GameDockSdk {
     standalone: true,
     onPlatformMessage: () => () => {},
     send: () => {},
+    reportViewport: () => {},
     saves: { list: notAvailable, get: notAvailable, put: notAvailable, remove: notAvailable },
   };
 }
@@ -220,6 +227,14 @@ function createConnectedSdk(env: GameDockEnv, hello: PlatformHelloMessage): Game
       if (!env.parentWindow) return;
       const payload: GameMessage = { v: PROTOCOL_VERSION, ...message };
       env.parentWindow.postMessage(payload, '*');
+    },
+    reportViewport(width, height) {
+      // 与 send 相同的窄通道;平台侧只认合法数值,非法输入直接忽略即可,无需在游戏侧断言。
+      if (!env.parentWindow) return;
+      env.parentWindow.postMessage(
+        { v: PROTOCOL_VERSION, t: 'game:viewport', width, height } satisfies GameMessage,
+        '*',
+      );
     },
     saves,
   };

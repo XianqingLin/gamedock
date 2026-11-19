@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
+import { resetNavStack } from '../lib/navStack';
 
 const renderApp = (initialEntries: string[] = ['/']) =>
   render(
@@ -9,6 +10,9 @@ const renderApp = (initialEntries: string[] = ['/']) =>
       <App />
     </MemoryRouter>,
   );
+
+// 导航栈为模块级状态，测试间重置以保证用例独立
+beforeEach(() => resetNavStack());
 
 describe('探索页', () => {
   it('轮播展示精选游戏，品牌名与侧栏入口可见', () => {
@@ -149,6 +153,14 @@ describe('详情页', () => {
     expect(screen.getByText('1.0.0')).toBeInTheDocument();
   });
 
+  it('点击开始游戏在新窗口打开运行页', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderApp(['/games/tether-together']);
+    fireEvent.click(screen.getByRole('button', { name: '开始游戏' }));
+    expect(openSpy).toHaveBeenCalledWith('/play/tether-together', '_blank', 'noopener,noreferrer');
+    openSpy.mockRestore();
+  });
+
   it('书签可在概览、评论、成就间切换，后两者暂为占位', () => {
     renderApp(['/games/tether-together']);
     expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
@@ -172,6 +184,14 @@ describe('详情页', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByRole('button', { name: '全部' })).toBeInTheDocument();
   });
+
+  it('浏览页带筛选进入详情，Escape 退出后筛选由 URL 恢复', () => {
+    renderApp(['/browse?cat=fighting']);
+    fireEvent.click(screen.getByRole('link', { name: /死神 VS 火影/ }));
+    expect(screen.getByRole('heading', { name: '《死神 VS 火影 重构版》' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('checkbox', { name: '格斗' })).toBeChecked();
+  });
 });
 
 describe('游戏运行页', () => {
@@ -183,9 +203,56 @@ describe('游戏运行页', () => {
     expect(screen.getByTitle('默契行动 游戏画面')).toBeInTheDocument();
   });
 
+  it('运行页不展示左侧栏与返回按钮', async () => {
+    renderApp(['/play/tether-together']);
+    expect(await screen.findByRole('heading', { name: '默契行动' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '游戏' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '返回' })).not.toBeInTheDocument();
+  });
+
   it('运行页游戏不存在时显示未找到', () => {
     renderApp(['/play/unknown-game']);
     expect(screen.getByText('未找到该游戏')).toBeInTheDocument();
+  });
+
+  it('固定比例游戏信箱式展示:配置比例兜底,viewport 上报覆盖,非法上报忽略', async () => {
+    renderApp(['/play/bvn']);
+    const iframe = await screen.findByTitle('死神 VS 火影 重构版 游戏画面');
+    const stage = iframe.parentElement as HTMLElement;
+    // 收到上报前用 games.json 的 aspectRatio(5:3)兜底,舞台加信箱式类名
+    expect(stage.style.aspectRatio).toBe(String(5 / 3));
+    expect(stage.className).toContain('game-stage-fit');
+
+    // 游戏经 game:viewport 上报实际尺寸,覆盖配置比例
+    const frameOrigin = window.location.origin;
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: iframe.contentWindow,
+        origin: frameOrigin,
+        data: { v: 1, t: 'game:viewport', width: 1000, height: 600 },
+      }),
+    );
+    expect(stage.style.aspectRatio).toBe(String(1000 / 600));
+
+    // 非法数值(非正数)直接忽略,比例保持不变
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        source: iframe.contentWindow,
+        origin: frameOrigin,
+        data: { v: 1, t: 'game:viewport', width: -1, height: 0 },
+      }),
+    );
+    expect(stage.style.aspectRatio).toBe(String(1000 / 600));
+  });
+
+  it('自适应比例游戏(未配置比例、无上报)填满可用区域', async () => {
+    renderApp(['/play/tether-together']);
+    const iframe = await screen.findByTitle('默契行动 游戏画面');
+    const stage = iframe.parentElement as HTMLElement;
+    expect(stage.style.aspectRatio).toBe('');
+    expect(stage.className).not.toContain('game-stage-fit');
   });
 });
 

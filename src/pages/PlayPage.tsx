@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { findBySlug } from '../lib/browse';
 import { resolveLaunch } from '../lib/launch';
 import { DISABLED_LABELS, STATUS_LABELS } from '../lib/types';
@@ -12,12 +12,11 @@ import { UserArea } from '../components/UserArea';
 
 /**
  * 游戏运行页（/play/:slug）：平台外边框 + 游戏 iframe。
- * 外边框承担返回、标题与全屏；游戏逻辑全部在 iframe 内。
- * 仅站内游戏经由此页；外链游戏在详情页直接新窗口打开。
+ * 新窗口打开的独立游戏界面：无左侧栏，顶栏承担标题与账号区；
+ * 游戏逻辑全部在 iframe 内。仅站内游戏经由此页；外链游戏在详情页直接新窗口打开。
  */
 export function PlayPage() {
   const { slug } = useParams();
-  const navigate = useNavigate();
   const game = findBySlug(GAMES, slug);
   const { status, user } = useAuth();
   const stageRef = useRef<HTMLDivElement>(null);
@@ -112,9 +111,6 @@ export function PlayPage() {
   return (
     <div className="page play-page" ref={stageRef}>
       <header className="play-header">
-        <button type="button" className="btn btn-ghost" onClick={() => navigate(`/games/${game.slug}`)}>
-          ← 返回
-        </button>
         <h1 className="play-title">{game.title}</h1>
         <div className="play-account-actions">
           <SocialEntry />

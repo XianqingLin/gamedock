@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { findBySlug, gamePlayModes, PLAY_MODE_LABELS } from '../lib/browse';
 import { STATUS_LABELS } from '../lib/types';
 import { CATEGORIES, GAMES } from '../data';
@@ -8,6 +8,7 @@ import { GameCover } from '../components/GameCover';
 import { StartButton } from '../components/StartButton';
 import { EmptyState } from '../components/EmptyState';
 import { SiteHeader } from '../components/SiteHeader';
+import { useBackToParent } from '../lib/navStack';
 
 const DEFAULT_COVER = '/assets/covers/default.svg';
 
@@ -125,8 +126,9 @@ function MediaCarousel({ game }: { game: Game }) {
 
 /**
  * 游戏详情页（/games/:slug）：可直接访问、刷新恢复、支持前进/后退。
- * 页内不设返回按钮，退出详情走顶栏返回按钮或 Escape：有历史时后退，
- * 直接打开详情 URL 时回浏览页；可选字段（评分/简介/完整介绍/开发者等）
+ * 页内不设返回按钮，退出详情走顶栏返回按钮或 Escape：后退至历史中最近的
+ * 浏览页位置（跳过运行页等非上级页面），历史中没有浏览页时直达浏览页；
+ * 可选字段（评分/简介/完整介绍/开发者等）
  * 没有数据时不渲染。
  *
  * 布局：标题 + 评分 + 书签（概览/评论/成就）为通栏头部，书签向下滚动时
@@ -137,15 +139,9 @@ function MediaCarousel({ game }: { game: Game }) {
  */
 export function GameDetailPage() {
   const { slug } = useParams();
-  const navigate = useNavigate();
+  const goBack = useBackToParent();
   const game = findBySlug(GAMES, slug);
   const [tab, setTab] = useState<DetailTabId>('overview');
-
-  const goBack = useCallback(() => {
-    const idx = Number((window.history.state as { idx?: number } | null)?.idx ?? 0);
-    if (idx > 0) navigate(-1);
-    else navigate('/browse', { replace: true });
-  }, [navigate]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

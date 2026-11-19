@@ -21,14 +21,14 @@
 
 ## 3. 路由与启动
 
-- `/` 探索页(精选轮播);`/browse` 浏览页(游戏目录);`/games/:slug` 详情(刷新恢复、前进后退);`/play/:slug` 运行页;其余路由显示未找到 + 返回首页。
+- `/` 探索页(精选轮播);`/browse` 浏览页(游戏目录);`/games/:slug` 详情(刷新恢复、前进后退);`/play/:slug` 运行页(详情页经 `window.open` 新窗口打开,不在站内路由跳转);其余路由显示未找到 + 返回首页。
 - 关闭详情或筛选失效时同步清理详情路由,避免 URL 指向已取消的选择。
 - 启动安全:外链仅 http(s),`javascript:`/`data:` 等按无效地址处理,不执行;新窗口带 `noopener`/`noreferrer`;无效启动不产生空白路由或空白窗口;启动失败不破坏浏览状态。
-- postMessage 接口:信封带版本号,`platform:`/`game:` 前缀;双方校验来源(`event.source` + `event.origin`,预期为 iframe 自身源);握手时序双方兜底(平台先发 hello,游戏可请求重发);登录态未确认不挂 iframe,加载后才就绪时重发 hello 补发用户。
+- postMessage 接口:信封带版本号,`platform:`/`game:` 前缀;双方校验来源(`event.source` + `event.origin`,预期为 iframe 自身源);握手时序双方兜底(平台先发 hello,游戏可请求重发);登录态未确认不挂 iframe,加载后才就绪时重发 hello 补发用户。游戏可经 SDK `reportViewport` 发 `game:viewport`(正数宽高,非法上报忽略),平台据此信箱式收紧 iframe 比例;未上报时用 games.json `aspectRatio` 兜底,两者皆无则填满可用区域。
 
 ## 4. 游戏数据
 
-- 单一数据源 `src/data/games.json`,游戏库/列表/详情共用。结构:`{ id, slug, title, cover, accentColor, categories[], topic?, releaseDate?, description?, launchUrl?, status, version?, order }`(`status: 'available' | 'coming-soon' | 'maintenance'`)。专题标签字典在 `src/data/topics.json`(经典复刻、AI 创作),标签值只能来自字典。
+- 单一数据源 `src/data/games.json`,游戏库/列表/详情共用。结构:`{ id, slug, title, cover, accentColor, categories[], topic?, releaseDate?, description?, launchUrl?, aspectRatio?, status, version?, order }`(`status: 'available' | 'coming-soon' | 'maintenance'`)。专题标签字典在 `src/data/topics.json`(经典复刻、AI 创作),标签值只能来自字典。
 - `id`/`slug` 唯一稳定,不用数组下标当标识;按 `order` 升序、相同按 `id`;可选字段缺省时不渲染空标签;在线人数无真实来源就不展示。
 - 新增游戏 = `server/games.config.json` 声明产物目录 + games.json 加数据,不改平台代码;存档等接口的 slug 校验与游戏数据一致。
 - 演示数据只用于开发测试;封面失败回退本地默认图。

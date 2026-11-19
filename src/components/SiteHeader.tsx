@@ -3,11 +3,13 @@ import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router
 import { SocialEntry } from './SocialEntry';
 import { UserArea } from './UserArea';
 import { SearchBar } from './SearchBar';
+import { useBackToParent } from '../lib/navStack';
 
 /**
  * 右侧工作区顶栏：返回按钮、搜索框与「探索/浏览」导航居左，全局社交与账号入口居右。
  * 搜索词与浏览页 URL（?q=）双向同步；在浏览页外输入时跳转到浏览页。
- * 返回按钮为层级式：详情页的上级是浏览页（有站内历史时后退，否则直达浏览页）；
+ * 返回按钮为层级式：详情页的上级是浏览页——后退至历史中最近的浏览页位置
+ * （跳过运行页等非上级页面），历史中没有浏览页时直达浏览页；
  * 探索、浏览等顶级页面无上级，按钮呈禁用态。
  */
 export function SiteHeader() {
@@ -19,6 +21,7 @@ export function SiteHeader() {
 
   // 层级式上级：目前只有游戏详情页有上级（浏览页）。
   const parent = /^\/games\/[^/]+$/.test(location.pathname) ? '/browse' : null;
+  const goBackToParent = useBackToParent();
 
   // 浏览页 URL 的搜索词变化（前进/后退、清除筛选）时同步输入框。
   useEffect(() => {
@@ -39,9 +42,7 @@ export function SiteHeader() {
 
   const goBack = () => {
     if (!parent) return;
-    // location.key 为 'default' 表示直接打开 URL（无站内历史），此时直达上级页面。
-    if (location.key !== 'default') navigate(-1);
-    else navigate(parent);
+    goBackToParent();
   };
 
   return (

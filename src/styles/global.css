@@ -1320,10 +1320,35 @@ input {
   position: relative;
   flex: 1;
   min-height: 0;
-  background: #080808;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 尺寸容器:舞台用 cqw/cqh 计算「宽受限或高受限」的信箱尺寸 */
+  container-type: size;
+  /* 舞台背景:游戏主题色的低饱和径向光晕,固定比例游戏周围不再是死黑 */
+  background:
+    radial-gradient(
+      120% 90% at 50% 42%,
+      color-mix(in srgb, var(--stage-accent, #3a3a4a) 16%, transparent) 0%,
+      transparent 62%
+    ),
+    #0a0a12;
 }
 
-.game-frame iframe {
+.game-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* 已知画面比例时收紧为信箱式(尺寸由 GameFrame 内联样式给出),加一圈主题色描边与柔光 */
+.game-stage.game-stage-fit {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--stage-accent, #3a3a4a) 28%, transparent),
+    0 20px 70px color-mix(in srgb, var(--stage-accent, #3a3a4a) 14%, transparent);
+}
+
+.game-stage iframe {
   position: absolute;
   inset: 0;
   display: block;

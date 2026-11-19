@@ -35,6 +35,8 @@ export interface Game {
   /** 截图/视频地址（.mp4/.webm 渲染为视频），按展示顺序；缺省时媒体区回退为封面图。 */
   screenshots?: string[];
   launchUrl?: string;
+  /** 游戏画面宽高比（如 "5:3"）；运行页信箱式布局的兜底值，游戏经 game:viewport 上报的实际尺寸优先。缺省表示画面自适应任意比例，运行页填满可用区域。 */
+  aspectRatio?: string;
   status: GameStatus;
   version?: string;
   updatedAt?: string;

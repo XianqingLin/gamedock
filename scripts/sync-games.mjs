@@ -3,8 +3,13 @@
  * key 规则与 worker(server/game-assets.mjs)一致:`g/<slug>/<相对路径>`。
  *
  * 用法:
- *   node scripts/sync-games.mjs           # 上传到线上 R2(--remote,需 wrangler 登录)
+ *   node scripts/sync-games.mjs           # 上传到线上 R2(需 wrangler 登录)
  *   node scripts/sync-games.mjs --local   # 写入本地 wrangler dev 的 R2 模拟(.wrangler/state)
+ *
+ * 上传通道:
+ *   --local 经 getPlatformProxy 单进程直连本地模拟的 R2 绑定(读 wrangler.jsonc,
+ *   持久化路径与 wrangler dev 一致),免去每文件一个 CLI 进程的冷启动;
+ *   远程模式没有对应的编程接口,仍逐文件调 `wrangler r2 object put`。
  *
  * 发布一致性:R2 没有原子目录替换,多文件更新存在短暂不一致窗口。
  * 游戏入口是 index.html,脚本把全部普通文件传完后再写各游戏的 index.html,
@@ -24,7 +29,6 @@ const BUCKET = 'gamedock-games';
 const CONCURRENCY = 8;
 
 const local = process.argv.slice(2).includes('--local');
-const scopeArgs = local ? ['--local'] : ['--remote'];
 
 let config;
 try {
@@ -34,7 +38,9 @@ try {
   process.exit(1);
 }
 
-/** 调 wrangler(异步,并发池依赖非阻塞):优先本地 node_modules,否则回退 npx。 */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 远程模式:调 wrangler(异步,并发池依赖非阻塞):优先本地 node_modules,否则回退 npx。 */
 function runWrangler(args) {
   const localBin = path.join(projectRoot, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
   const useLocal = fs.existsSync(localBin);
@@ -54,43 +60,62 @@ function runWrangler(args) {
   });
 }
 
-/** 递归收集目录下的相对路径(posix 分隔)。 */
-function walk(dir, base = dir) {
-  const out = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walk(full, base));
-    else if (entry.isFile()) out.push(path.relative(base, full).split(path.sep).join('/'));
+/**
+ * 上传器:put(key, file, contentType) 抛错即失败。
+ * 本地模式经 getPlatformProxy 直连模拟 R2(单进程,快);远程模式逐文件起 wrangler CLI。
+ * 两种通道都可能偶发竞争(与 wrangler dev 共享本地状态库 / 远端限流),重试 3 次兜底。
+ */
+async function makeLocalUploader() {
+  const { getPlatformProxy } = await import('wrangler');
+  const proxy = await getPlatformProxy();
+  const bucket = proxy.env.GAMES;
+  if (!bucket) {
+    await proxy.dispose();
+    throw new Error(`wrangler 绑定 GAMES 不存在(实际绑定:${Object.keys(proxy.env).join(', ') || '无'}),检查 wrangler.jsonc 的 r2_buckets`);
   }
-  return out;
+  return {
+    async put(key, file, contentType) {
+      let lastErr;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          await bucket.put(key, fs.readFileSync(file), { httpMetadata: { contentType } });
+          return;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < 3) await sleep(500 * attempt);
+        }
+      }
+      throw lastErr;
+    },
+    dispose: () => proxy.dispose(),
+  };
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function makeRemoteUploader() {
+  const upload = async (key, file, contentType) => {
+    const args = ['r2', 'object', 'put', `${BUCKET}/${key}`, '--file', file, '--content-type', contentType];
+    let lastResult;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      lastResult = await runWrangler(args);
+      if (lastResult.status === 0) return;
+      if (attempt < 3) await sleep(500 * attempt);
+    }
+    const detail = (lastResult.output || '').trim().split('\n').slice(-3).join('\n');
+    throw new Error(`上传失败 ${key}\n${detail}`);
+  };
+  return { put: upload, dispose: async () => {} };
+}
 
-async function upload(slug, source, rel) {
-  const key = `g/${slug}/${rel}`;
-  const file = path.join(source, rel.split('/').join(path.sep));
-  const contentType = inferContentType(rel);
-  const args = [
-    'r2',
-    'object',
-    'put',
-    `${BUCKET}/${key}`,
-    '--file',
-    file,
-    '--content-type',
-    contentType,
-    ...scopeArgs,
-  ];
-  // 并发 wrangler 进程偶发资源竞争(本地状态库/远端限流),重试 3 次兜底。
-  let lastResult;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    lastResult = await runWrangler(args);
-    if (lastResult.status === 0) return;
-    if (attempt < 3) await sleep(500 * attempt);
+/** 递归收集目录下的相对路径(posix 分隔)。跟随符号链接:web-bvn 的构建产物把 packages/data/assets 以符号链接形式链入 dist,withFileTypes 下链接项 isDirectory() 为 false,按 stat(解引用)判断。 */
+function walk(dir, base = dir) {
+  const out = [];
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name);
+    const stat = fs.statSync(full);
+    if (stat.isDirectory()) out.push(...walk(full, base));
+    else if (stat.isFile()) out.push(path.relative(base, full).split(path.sep).join('/'));
   }
-  const detail = (lastResult.output || '').trim().split('\n').slice(-3).join('\n');
-  throw new Error(`上传失败 ${key}\n${detail}`);
+  return out;
 }
 
 /** 简单并发池。 */
@@ -108,25 +133,35 @@ async function pool(items, worker) {
 let totalFiles = 0;
 const failures = [];
 
-for (const slug of Object.keys(config)) {
-  const source = path.resolve(projectRoot, config[slug]);
-  if (!fs.existsSync(source)) {
-    console.warn(`[sync-games] 跳过 ${slug}:构建产物不存在(${config[slug]}),先构建该游戏`);
-    continue;
-  }
+const uploader = local ? await makeLocalUploader().catch((err) => {
+  console.error(`[sync-games] 初始化本地上传通道失败:${err.message}`);
+  process.exit(1);
+}) : makeRemoteUploader();
 
-  const files = walk(source);
-  const indexes = files.filter((f) => f.endsWith('/index.html') || f === 'index.html');
-  const assets = files.filter((f) => !indexes.includes(f));
+try {
+  for (const slug of Object.keys(config)) {
+    const source = path.resolve(projectRoot, config[slug]);
+    if (!fs.existsSync(source)) {
+      console.warn(`[sync-games] 跳过 ${slug}:构建产物不存在(${config[slug]}),先构建该游戏`);
+      continue;
+    }
 
-  try {
-    await pool(assets, (rel) => upload(slug, source, rel));
-    await pool(indexes, (rel) => upload(slug, source, rel));
-    totalFiles += files.length;
-    console.log(`[sync-games] ${slug}:${files.length} 个文件 → ${BUCKET}/g/${slug}/`);
-  } catch (err) {
-    failures.push(`${slug}: ${err.message}`);
+    const files = walk(source);
+    const indexes = files.filter((f) => f.endsWith('/index.html') || f === 'index.html');
+    const assets = files.filter((f) => !indexes.includes(f));
+    const upload = (rel) => uploader.put(`g/${slug}/${rel}`, path.join(source, rel.split('/').join(path.sep)), inferContentType(rel));
+
+    try {
+      await pool(assets, upload);
+      await pool(indexes, upload);
+      totalFiles += files.length;
+      console.log(`[sync-games] ${slug}:${files.length} 个文件 → ${BUCKET}/g/${slug}/`);
+    } catch (err) {
+      failures.push(`${slug}: ${err.message}`);
+    }
   }
+} finally {
+  await uploader.dispose();
 }
 
 if (failures.length) {

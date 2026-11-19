@@ -26,6 +26,13 @@ export interface GameMessage {
   [key: string]: unknown;
 }
 
+/** 游戏上报画面尺寸(game:viewport):平台据此信箱式限制 iframe 比例。 */
+export interface GameViewportMessage extends GameMessage {
+  t: 'game:viewport';
+  width: number;
+  height: number;
+}
+
 /**
  * 平台发送 hello 完成握手（携带 slug 与已登录用户或 null）。
  * 时序说明:hello 可能在游戏侧监听器就绪前发出(消息丢失),
@@ -51,4 +58,10 @@ export function isGameMessage(data: unknown): data is GameMessage {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   const value = data as Record<string, unknown>;
   return value.v === PROTOCOL_VERSION && typeof value.t === 'string' && value.t.startsWith('game:');
+}
+
+/** game:viewport 载荷校验:宽高必须是正的有限数,非法上报直接忽略。 */
+export function isGameViewportMessage(data: GameMessage): data is GameViewportMessage {
+  const finitePositive = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n > 0;
+  return data.t === 'game:viewport' && finitePositive(data.width) && finitePositive(data.height);
 }

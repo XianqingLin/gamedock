@@ -16,6 +16,7 @@
     "rating": 4.6,
     "developer": "林贤庆",
     "launchUrl": "/g/bvn/index.html",
+    "aspectRatio": "5:3",
     "status": "available",
     "version": "1.0.0",
     "order": 1,
