@@ -6,6 +6,8 @@ export interface BrowseFilter {
   categoryIds: string[];
   /** 专题单选：'' 表示未选（全不选），未知专题按未选处理。 */
   topicId: string;
+  /** 选中的游戏方式（可多选，空集即“全部”），未知值按未选处理。 */
+  modeIds: string[];
   /** 排序方式，未知值按默认（数据顺序）处理。 */
   sort: SortId;
 }
@@ -22,6 +24,26 @@ export const SORT_LABELS: Record<SortId, string> = {
   upcoming: '即将推出',
   alpha: '按字母顺序',
 };
+
+/** 游戏方式（由 capabilities 派生）：筛选与详情页共用同一套 id 与标签。 */
+export const PLAY_MODES = ['single', 'local-mp', 'online'] as const;
+
+export type PlayModeId = (typeof PLAY_MODES)[number];
+
+export const PLAY_MODE_LABELS: Record<PlayModeId, string> = {
+  single: '单人',
+  'local-mp': '本地双人',
+  online: '在线联机',
+};
+
+/** 游戏支持的游戏方式，按固定顺序返回。 */
+export function gamePlayModes(game: Game): PlayModeId[] {
+  const modes: PlayModeId[] = [];
+  if (game.capabilities?.singlePlayer) modes.push('single');
+  if (game.capabilities?.localMultiplayer) modes.push('local-mp');
+  if (game.capabilities?.online) modes.push('online');
+  return modes;
+}
 
 export function normalizeQuery(raw: string): string {
   return raw.trim().toLowerCase();
@@ -73,9 +95,9 @@ function applySort(games: readonly Game[], sort: SortId): Game[] {
 }
 
 /**
- * 搜索、分类与专题的组合筛选：名称包含匹配（忽略首尾空白与大小写）；
- * 分类为多选（空集即“全部”）；专题为单选（'' 即全不选）；
- * 未知分类/专题按未选处理，避免脏 URL 导致永久空结果。
+ * 搜索、分类、专题与游戏方式的组合筛选：名称包含匹配（忽略首尾空白与大小写）；
+ * 分类与游戏方式为多选（命中任一即保留，空集即“全部”）；专题为单选（'' 即全不选）；
+ * 未知分类/专题/游戏方式按未选处理，避免脏 URL 导致永久空结果。
  */
 export function filterGames(
   games: readonly Game[],
@@ -87,12 +109,17 @@ export function filterGames(
   const knownCategoryIds = filter.categoryIds.filter((id) => categories.some((c) => c.id === id));
   const categoryActive = knownCategoryIds.length > 0;
   const topicActive = filter.topicId !== NO_TOPIC && topics.some((t) => t.id === filter.topicId);
+  const knownModeIds = filter.modeIds.filter((id) =>
+    (PLAY_MODES as readonly string[]).includes(id),
+  );
+  const modeActive = knownModeIds.length > 0;
   const sort = SORT_IDS.includes(filter.sort) ? filter.sort : 'default';
 
   const matched = sortGames(games).filter((game) => {
     if (query && !game.title.toLowerCase().includes(query)) return false;
     if (categoryActive && !knownCategoryIds.some((id) => game.categories.includes(id))) return false;
     if (topicActive && game.topic !== filter.topicId) return false;
+    if (modeActive && !gamePlayModes(game).some((mode) => knownModeIds.includes(mode))) return false;
     return true;
   });
   return applySort(matched, sort);

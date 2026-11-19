@@ -88,10 +88,27 @@ describe('浏览页', () => {
     expect(screen.getByRole('button', { name: '按字母顺序' })).toBeInTheDocument();
   });
 
+  it('游戏方式筛选生效', () => {
+    renderApp(['/browse']);
+    const single = screen.getByRole('checkbox', { name: '单人' });
+    expect(single).not.toBeChecked();
+    fireEvent.click(single);
+    // 两款游戏都支持单人，筛选后仍在列表中
+    expect(screen.getByRole('link', { name: /死神 VS 火影/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /默契行动/ })).toBeInTheDocument();
+    expect(single).toBeChecked();
+  });
+
+  it('URL 中的游戏方式参数在刷新后恢复', () => {
+    renderApp(['/browse?mode=local-mp']);
+    expect(screen.getByRole('checkbox', { name: '本地双人' })).toBeChecked();
+    expect(screen.getByRole('link', { name: /死神 VS 火影/ })).toBeInTheDocument();
+  });
+
   it('点击卡片进入详情并保留浏览状态', () => {
     renderApp(['/browse']);
     fireEvent.click(screen.getByRole('link', { name: /默契行动/ }));
-    expect(screen.getByRole('heading', { name: '默契行动' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '《默契行动》' })).toBeInTheDocument();
     // 返回后搜索条件由 URL 恢复
   });
 });
@@ -119,13 +136,29 @@ describe('顶栏返回按钮', () => {
 describe('详情页', () => {
   it('展示名称、状态、分类和可用的开始游戏按钮', () => {
     renderApp(['/games/tether-together']);
-    expect(screen.getByRole('heading', { name: '默契行动' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '《默契行动》' })).toBeInTheDocument();
     expect(screen.getByText('可用')).toBeInTheDocument();
-    expect(screen.getByText('双人合作 · 平台跳跃')).toBeInTheDocument();
+    // 游戏类型与游戏方式两栏：胶囊标签带标题，竖线固定在左栏中点
+    expect(screen.getByText('双人合作')).toBeInTheDocument();
+    expect(screen.getByText('平台跳跃')).toBeInTheDocument();
+    expect(screen.getByText('单人')).toBeInTheDocument();
+    expect(screen.getByText('在线联机')).toBeInTheDocument();
     const start = screen.getByRole('button', { name: '开始游戏' });
     expect(start).toBeEnabled();
     expect(screen.getByText('版本')).toBeInTheDocument();
     expect(screen.getByText('1.0.0')).toBeInTheDocument();
+  });
+
+  it('书签可在概览、评论、成就间切换，后两者暂为占位', () => {
+    renderApp(['/games/tether-together']);
+    expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: '评论' }));
+    expect(screen.getByText('评论暂未开放')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '成就' }));
+    expect(screen.getByText('成就暂未开放')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '概览' }));
+    expect(screen.getByRole('tab', { name: '概览' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: '开始游戏' })).toBeInTheDocument();
   });
 
   it('游戏不存在时显示未找到状态', () => {

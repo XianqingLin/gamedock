@@ -26,6 +26,14 @@ export interface Game {
   /** 发布日期（ISO 日期），驱动“最新推出 / 即将推出”排序；缺省视为已发布但日期未知。 */
   releaseDate?: string;
   description?: string;
+  /** 完整介绍（长文案）；缺省时详情页只渲染简介。 */
+  fullDescription?: string;
+  /** 媒体评分（0–5，一位小数）；缺省时详情页不渲染评分行。 */
+  rating?: number;
+  /** 开发者名称；缺省时右侧信息栏不渲染该行。 */
+  developer?: string;
+  /** 截图/视频地址（.mp4/.webm 渲染为视频），按展示顺序；缺省时媒体区回退为封面图。 */
+  screenshots?: string[];
   launchUrl?: string;
   status: GameStatus;
   version?: string;

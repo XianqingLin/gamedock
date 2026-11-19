@@ -9,13 +9,15 @@ import { GameCard } from '../components/GameCard';
 import { EmptyState } from '../components/EmptyState';
 
 /**
- * 浏览页（游戏目录）：排序下拉 + 封面网格 + 右侧筛选栏（专题单选、游戏类型多选）。
- * 搜索、排序与筛选状态全部写入 URL（?q=&cat=&tag=&sort=），刷新与前进/后退均可恢复。
+ * 浏览页（游戏目录）：排序下拉 + 封面网格 + 右侧筛选栏（专题单选、游戏类型与
+ * 游戏方式多选）。搜索、排序与筛选状态全部写入 URL（?q=&cat=&tag=&mode=&sort=），
+ * 刷新与前进/后退均可恢复。
  */
 export function BrowsePage() {
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
   const selectedCategories = params.getAll('cat');
+  const selectedModes = params.getAll('mode');
   const topicId = params.get('tag') ?? NO_TOPIC;
   const sortParam = params.get('sort');
   const sort: SortId = sortParam && SORT_IDS.includes(sortParam as SortId) ? (sortParam as SortId) : 'default';
@@ -32,17 +34,21 @@ export function BrowsePage() {
       else next.set('sort', id);
     });
 
-  const toggleCategory = (id: string) =>
+  const toggleRepeatedParam = (key: string, current: readonly string[], id: string) =>
     updateParams((next) => {
-      if (next.getAll('cat').includes(id)) {
-        next.delete('cat');
-        for (const current of selectedCategories) {
-          if (current !== id) next.append('cat', current);
+      if (next.getAll(key).includes(id)) {
+        next.delete(key);
+        for (const value of current) {
+          if (value !== id) next.append(key, value);
         }
       } else {
-        next.append('cat', id);
+        next.append(key, id);
       }
     });
+
+  const toggleCategory = (id: string) => toggleRepeatedParam('cat', selectedCategories, id);
+
+  const toggleMode = (id: string) => toggleRepeatedParam('mode', selectedModes, id);
 
   const setTopic = (id: string) =>
     updateParams((next) => {
@@ -53,8 +59,15 @@ export function BrowsePage() {
   const clearFilters = () => setParams(new URLSearchParams(), { replace: true });
 
   const results = useMemo(
-    () => filterGames(GAMES, CATEGORIES, TOPICS, { query, categoryIds: selectedCategories, topicId, sort }),
-    [query, selectedCategories, topicId, sort],
+    () =>
+      filterGames(GAMES, CATEGORIES, TOPICS, {
+        query,
+        categoryIds: selectedCategories,
+        topicId,
+        modeIds: selectedModes,
+        sort,
+      }),
+    [query, selectedCategories, topicId, selectedModes, sort],
   );
 
   return (
@@ -96,8 +109,10 @@ export function BrowsePage() {
             categories={CATEGORIES}
             topicId={topicId}
             selectedCategories={selectedCategories}
+            selectedModes={selectedModes}
             onTopicChange={setTopic}
             onToggleCategory={toggleCategory}
+            onToggleMode={toggleMode}
           />
         </div>
       </main>

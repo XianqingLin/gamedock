@@ -31,6 +31,7 @@ const noFilter = {
   query: '',
   categoryIds: [],
   topicId: NO_TOPIC,
+  modeIds: [],
   sort: 'default' as const,
 };
 
@@ -98,6 +99,56 @@ describe('filterGames 搜索、分类与专题组合筛选', () => {
 
   it('未知专题按全不选处理', () => {
     const results = filterGames(games, CATEGORIES, TOPICS, { ...noFilter, topicId: 'not-exist' });
+    expect(results).toHaveLength(3);
+  });
+
+  it('游戏方式筛选只保留具备该方式的游戏', () => {
+    const singleOnly = makeGame({
+      id: 'solo',
+      slug: 'solo',
+      title: '单人游戏',
+      order: 3,
+      capabilities: { singlePlayer: true },
+    });
+    const onlineOnly = makeGame({
+      id: 'net',
+      slug: 'net',
+      title: '联机游戏',
+      order: 4,
+      capabilities: { online: { mode: 'platform', maxPlayers: 2, modes: ['在线对战'] } },
+    });
+    // games 数组中的夹具未声明 capabilities，不具备任何游戏方式
+    const results = filterGames([singleOnly, onlineOnly, ...games], CATEGORIES, TOPICS, {
+      ...noFilter,
+      modeIds: ['single'],
+    });
+    expect(results.map((g) => g.id)).toEqual(['solo']);
+  });
+
+  it('游戏方式多选时命中任一方式即保留', () => {
+    const singleOnly = makeGame({
+      id: 'solo',
+      slug: 'solo',
+      title: '单人游戏',
+      order: 3,
+      capabilities: { singlePlayer: true },
+    });
+    const onlineOnly = makeGame({
+      id: 'net',
+      slug: 'net',
+      title: '联机游戏',
+      order: 4,
+      capabilities: { online: { mode: 'platform', maxPlayers: 2, modes: ['在线对战'] } },
+    });
+    const results = filterGames([singleOnly, onlineOnly, ...games], CATEGORIES, TOPICS, {
+      ...noFilter,
+      modeIds: ['single', 'online'],
+    });
+    expect(results.map((g) => g.id)).toEqual(['solo', 'net']);
+  });
+
+  it('未知游戏方式按“全部”处理', () => {
+    const results = filterGames(games, CATEGORIES, TOPICS, { ...noFilter, modeIds: ['not-exist'] });
     expect(results).toHaveLength(3);
   });
 });
