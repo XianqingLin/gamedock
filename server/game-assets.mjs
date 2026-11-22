@@ -2,21 +2,42 @@
  * 游戏静态资源服务(R2):`/g/<slug>/...` → R2 对象 `g/<slug>/...`。
  * - 目录路径(`'/g/bvn'`、`'/g/bvn/'`)回退 `<key>/index.html`
  * - Content-Type:对象元数据优先,扩展名推断兜底
- * - index.html 不缓存(发布一致性),其余短缓存
- * - 支持单区间 Range 请求(wasm/音视频流式加载需要)
+ * - 缓存分层(2026-11-22 重定,压掉跨边境慢拉取):
+ *     index.html         no-cache(发布一致性;不进边缘缓存)
+ *     <slug>/assets/*    max-age=31536000, immutable(Vite 内容哈希块,文件名即版本)
+ *     其余(数据/图集/音频) max-age=86400(一天,发布后 ≤1 天收敛——与原 nginx expires 1d 同取舍)
+ * - 边缘缓存 = Cache API(worker 响应默认不进 CF 缓存;仅 ctx 可用且 GET 无 Range 时,
+ *   陈旧度以响应自身 Cache-Control max-age 为上界);带 If-None-Match 的数据资产请求
+ *   一律绕过边缘直连 R2 校验——边缘不得拿旧 ETag 回 304,否则更新永不到达。
+ * - If-None-Match 协商:非 immutable 路径用 R2 head() 校验(不取 body);immutable 路径
+ *   同 URL 内容不变,可与边缘缓存副本比对直接 304。
+ * - 支持单区间 Range 请求(wasm/音视频流式加载需要);Range 路径不进边缘缓存。
  * 游戏域(games.gamedock.cn)与主域 dev 代理都经由此模块;
  * sync-games.mjs 负责按同样的 `g/<slug>/` 前缀写入 R2。
  */
 import { inferContentType } from './mime.mjs';
 
 const INDEX_CACHE = 'no-cache';
-const ASSET_CACHE = 'public, max-age=300';
+const HASHED_CACHE = 'public, max-age=31536000, immutable';
+const DATA_CACHE = 'public, max-age=86400';
 
 function textResponse(status, message) {
   return new Response(message, {
     status,
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' },
   });
+}
+
+/** R2 key → 缓存策略(index.html / Vite 哈希块 / 数据资产)。 */
+function cacheControlOf(key) {
+  if (key.endsWith('/index.html')) return INDEX_CACHE;
+  if (/(^|\/)assets\/[^/]+$/.test(key)) return HASHED_CACHE;
+  return DATA_CACHE;
+}
+
+/** 是否内容寻址(immutable):同 URL 内容永不变,边缘缓存副本可安全用于 304 协商。 */
+function isImmutable(key) {
+  return cacheControlOf(key) === HASHED_CACHE;
 }
 
 /**
@@ -44,7 +65,7 @@ function baseHeaders(key, object) {
   );
   headers.set('ETag', object.httpEtag);
   headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('Cache-Control', key.endsWith('/index.html') ? INDEX_CACHE : ASSET_CACHE);
+  headers.set('Cache-Control', cacheControlOf(key));
   return headers;
 }
 
@@ -70,7 +91,34 @@ function objectResponse(object, key, request, requestedRange) {
   return new Response(object.body, { status: 200, headers });
 }
 
-export async function handleGameAsset(request, env) {
+/** ETag 归一化:If-None-Match 按 RFC 7232 用弱比较——忽略 W/ 前缀与引号。 */
+function etagToken(v) {
+  return v.trim().replace(/^W\//, '').replace(/^"|"$/g, '');
+}
+
+/** If-None-Match 与 ETag 匹配(弱比较;允许多值逗号分隔与裸值形式)。 */
+function etagMatches(inm, etag) {
+  const t = etagToken(etag);
+  return inm.split(',').some((raw) => etagToken(raw) === t);
+}
+
+/**
+ * R2 key 的当前 ETag。immutable 路径可信任边缘缓存副本的 ETag(同 URL 内容不变);
+ * 其余一律 R2 head() 权威校验——head 不可用(旧 mock)时回退全量 get。
+ */
+async function currentEtag(env, key, object, cached) {
+  if (isImmutable(key) && cached) {
+    const etag = cached.headers.get('ETag');
+    if (etag !== null) return etag;
+  }
+  if (typeof env.GAMES?.head === 'function') {
+    const head = await env.GAMES.head(key);
+    return head?.httpEtag ?? null;
+  }
+  return object?.httpEtag ?? null;
+}
+
+export async function handleGameAsset(request, env, ctx) {
   if (!env.GAMES) {
     return textResponse(503, '游戏资源绑定缺失:请检查 wrangler.jsonc 的 R2(GAMES)配置。');
   }
@@ -92,14 +140,65 @@ export async function handleGameAsset(request, env) {
   }
 
   const range = parseRange(request.headers.get('range'));
+  const edgeCacheable =
+    ctx !== undefined &&
+    request.method === 'GET' &&
+    range === null &&
+    !key.endsWith('/index.html') &&
+    typeof caches !== 'undefined' &&
+    caches.default !== undefined;
+  const edge = edgeCacheable ? caches.default : null;
+  const inm = request.headers.get('if-none-match');
+
   try {
+    // —— 边缘缓存命中(无 If-None-Match 的普通 GET;协商请求必须走权威校验) ——
+    if (edge !== null && inm === null) {
+      const cached = await edge.match(request);
+      if (cached !== undefined) {
+        const hit = new Response(cached.body, cached);
+        hit.headers.set('X-Cache', 'HIT');
+        return hit;
+      }
+    }
+
+    // —— If-None-Match 协商:immutable 用边缘副本 ETag,其余 R2 head() 权威校验 ——
+    if (inm !== null && range === null) {
+      const cached = edge !== null ? await edge.match(request) : undefined;
+      const current = await currentEtag(env, key, null, cached);
+      if (current !== null && etagMatches(inm, current)) {
+        return new Response(null, {
+          status: 304,
+          headers: {
+            ETag: current,
+            'Cache-Control': cacheControlOf(key),
+            'X-Content-Type-Options': 'nosniff',
+            'X-Cache': cached !== undefined ? 'HIT' : 'MISS',
+          },
+        });
+      }
+      // 协商未命中:继续走全量 R2 读取(下方),响应头上补协商结果标记。
+    }
+
+    // —— 全量读取 R2 ——
     let object = await env.GAMES.get(key, range ? { range } : undefined);
     if (!object) {
       // 目录路径回退 index.html('/g/bvn'、'/g/bvn/' → 'g/bvn/index.html')。
       object = await env.GAMES.get(`${key}/index.html`, range ? { range } : undefined);
       if (object) return objectResponse(object, `${key}/index.html`, request, range);
     } else {
-      return objectResponse(object, key, request, range);
+      const response = objectResponse(object, key, request, range);
+      // 200 全量响应且可策略缓存 → 写边缘缓存(不缓存 index.html;陈旧度 ≤ max-age)。
+      if (
+        edge !== null &&
+        response.status === 200 &&
+        inm === null
+      ) {
+        const cached = new Response(response.clone().body, response);
+        cached.headers.set('X-Cache', 'HIT');
+        ctx.waitUntil(edge.put(request, cached));
+      }
+      response.headers.set('X-Cache', inm !== null ? 'REVALIDATED-MISS' : 'MISS');
+      return response;
     }
   } catch (err) {
     // Range 非法(如超出对象大小)时退回全量响应。

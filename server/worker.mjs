@@ -33,7 +33,7 @@ function isGameHost(hostname) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     let url;
     try {
       url = new URL(request.url);
@@ -45,7 +45,7 @@ export default {
     // 游戏内容域:只服务 R2 里的游戏静态资源。
     if (isGameHost(hostname)) {
       try {
-        return await handleGameAsset(request, env);
+        return await handleGameAsset(request, env, ctx);
       } catch (err) {
         console.error('[worker] 游戏资源请求失败:', err);
         return jsonResponse(500, '服务器内部错误');
@@ -63,7 +63,7 @@ export default {
         });
       }
       // 本地 dev(vite/wrangler 代理):直接读本地 R2 模拟(sync-games.mjs --local 写入)。
-      return handleGameAsset(request, env);
+      return handleGameAsset(request, env, ctx);
     }
 
     if (pathname !== '/api' && !pathname.startsWith('/api/')) {

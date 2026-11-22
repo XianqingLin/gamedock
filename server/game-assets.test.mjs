@@ -46,7 +46,9 @@ function createR2Mock(objects) {
 const R2 = createR2Mock({
   'g/bvn/index.html': '<html>bvn</html>',
   'g/bvn/js/app.js': 'console.log(1)',
+  'g/bvn/assets/index-AbC.js': 'export default 1',
   'g/bvn/assets/logo.svg': '<svg/>',
+  'g/bvn/packages/data/assets/fighters/x.webp': 'webp',
   'g/tether-together/data.bin': '0123456789',
   'g/meta/index.html': '<html>meta</html>',
 });
@@ -86,11 +88,19 @@ describe('handleGameAsset R2 静态资源服务', () => {
     }
   });
 
-  it('index.html 不缓存,普通资源短缓存', async () => {
+  it('index.html 不缓存;哈希块 immutable;数据资产一天', async () => {
     const index = await handleGameAsset(request('/g/bvn/index.html'), { GAMES: R2 });
-    const asset = await handleGameAsset(request('/g/bvn/js/app.js'), { GAMES: R2 });
+    const hashed = await handleGameAsset(request('/g/bvn/assets/index-AbC.js'), { GAMES: R2 });
+    const data = await handleGameAsset(request('/g/bvn/js/app.js'), { GAMES: R2 });
+    const nested = await handleGameAsset(request('/g/bvn/packages/data/assets/fighters/x.webp'), {
+      GAMES: R2,
+    });
     expect(index.headers.get('Cache-Control')).toBe('no-cache');
-    expect(asset.headers.get('Cache-Control')).toBe('public, max-age=300');
+    expect(hashed.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    expect(data.headers.get('Cache-Control')).toBe('public, max-age=86400');
+    expect(nested.headers.get('Cache-Control')).toBe('public, max-age=86400');
+    // 测试环境无 ctx → 不走边缘缓存
+    expect(hashed.headers.get('X-Cache')).toBe('MISS');
   });
 
   it('未命中 → 404', async () => {
