@@ -16,7 +16,10 @@
  * 均不入库);下次同步内容未变的文件直接跳过,重复部署从全量 ~8 分钟降到秒级。
  * 状态文件丢失 = 自动退化为一次全量(多传不漏传);`--full` 强制全量重建清单。
  * 前提:本脚本是唯一发布口——绕过脚本手工改 R2 会让清单失真(漏传),此时用 --full。
- * 清单按 slug 剪枝:产物中已消失的条目随本次同步移除(R2 侧旧对象本就不删除)。
+ * 延迟清理:产物中消失的 key 不立即删——移入"待删区"(retired,带时间戳),超过 7 天后
+ * 于同步末尾发 DELETE(同一限流)。保留期覆盖旧 index.html 与长命标签页懒加载旧 chunk
+ * 的窗口;待删期内文件复活(重回产物)则自动移出待删区。局限:差分清单诞生前的历史
+ * 垃圾(无 key 记录)无法枚举清理——将来配 S3 凭证走 ListObjectsV2 一次性处理。
  *
  * 发布一致性:R2 没有原子目录替换,多文件更新存在短暂不一致窗口。
  * 游戏入口是 index.html,脚本把全部普通文件传完后再写各游戏的 index.html,
@@ -38,6 +41,8 @@ const CONCURRENCY = 8;
 const REQUEST_INTERVAL_MS = 100;
 const MAX_ATTEMPTS = 5;
 const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID ?? '603d5e2ca6482dd2a6472c1db04484db';
+// 待删区保留期:覆盖旧 index/长命标签页懒加载旧 chunk 的存活窗口。
+const RETENTION_MS = 7 * 24 * 3600 * 1000;
 
 const argv = process.argv.slice(2);
 const local = argv.includes('--local');
@@ -54,14 +59,22 @@ try {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 差分状态清单:`{ version, entries: { r2key: md5hex } }`。读取失败按空清单处理(退化为全量)。 */
+/** 差分状态清单:`{ version, entries: { r2key: md5hex }, retired: { r2key: isoTimestamp } }`。
+ *  读取失败按空清单处理(退化为全量,绝不误删——待删区为空即无删除动作)。 */
 function loadState() {
-  if (fullSync) return { version: 1, entries: {} };
+  const empty = { version: 2, entries: {}, retired: {} };
+  if (fullSync) return empty;
   try {
     const raw = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-    if (raw?.version === 1 && raw.entries && typeof raw.entries === 'object') return raw;
+    if (raw?.entries && typeof raw.entries === 'object') {
+      return {
+        version: 2,
+        entries: raw.entries,
+        retired: raw.retired && typeof raw.retired === 'object' ? raw.retired : {},
+      };
+    }
   } catch {}
-  return { version: 1, entries: {} };
+  return empty;
 }
 
 const md5 = (file) => crypto.createHash('md5').update(fs.readFileSync(file)).digest('hex');
@@ -102,7 +115,45 @@ async function makeLocalUploader() {
       }
       throw lastErr;
     },
+    del: async (key) => {
+      let lastErr;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          await bucket.delete(key);
+          return;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < 3) await sleep(500 * attempt);
+        }
+      }
+      throw lastErr;
+    },
     dispose: () => proxy.dispose(),
+  };
+}
+
+/** 远程 DELETE:404 视为"已不存在"(重复清理/手工先删过)按成功处理。 */
+function makeRemoteDeleter(token) {
+  return async (key) => {
+    const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/r2/buckets/${BUCKET}/objects/${key}`;
+    let lastErr;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      try {
+        await waitSlot();
+        const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok || res.status === 404) return;
+        const retryAfter = Number(res.headers.get('retry-after'));
+        lastErr = new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        if (res.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+          await sleep(retryAfter * 1000);
+          continue;
+        }
+      } catch (err) {
+        lastErr = err;
+      }
+      if (attempt < MAX_ATTEMPTS) await sleep(500 * 2 ** (attempt - 1));
+    }
+    throw new Error(`删除失败 ${key}\n${lastErr?.message ?? ''}`);
   };
 }
 
@@ -126,6 +177,7 @@ function readApiToken() {
 
 function makeRemoteUploader() {
   const token = readApiToken();
+  const del = makeRemoteDeleter(token);
   const upload = async (key, file, contentType) => {
     const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/r2/buckets/${BUCKET}/objects/${key}`;
     let lastErr;
@@ -151,7 +203,7 @@ function makeRemoteUploader() {
     }
     throw new Error(`上传失败 ${key}\n${lastErr?.message ?? ''}`);
   };
-  return { put: upload, dispose: async () => {} };
+  return { put: upload, del, dispose: async () => {} };
 }
 
 /** 递归收集目录下的相对路径(posix 分隔)。跟随符号链接:web-bvn 的构建产物把 packages/data/assets 以符号链接形式链入 dist,withFileTypes 下链接项 isDirectory() 为 false,按 stat(解引用)判断。 */
@@ -187,7 +239,9 @@ const uploader = local ? await makeLocalUploader().catch((err) => {
 let totalFiles = 0;
 let totalUploaded = 0;
 let totalSkipped = 0;
+let totalDeleted = 0;
 const failures = [];
+const deleteFailures = [];
 
 try {
   for (const slug of Object.keys(config)) {
@@ -226,10 +280,18 @@ try {
       };
       await pool(assets, (u) => put(u));
       await pool(indexUploads, (u) => put(u));
-      // 按 slug 剪枝:本次产物里已消失的条目移出清单。
+      // 按 slug 剪枝:本次产物里已消失的条目移出清单、进待删区(7 天后删);
+      // 待删期内复活的 key(重回产物)移出待删区。
       const prefix = `g/${slug}/`;
+      const nowIso = new Date().toISOString();
       for (const key of Object.keys(state.entries)) {
-        if (key.startsWith(prefix) && !seen.has(key)) delete state.entries[key];
+        if (key.startsWith(prefix) && !seen.has(key)) {
+          delete state.entries[key];
+          if (!state.retired[key]) state.retired[key] = nowIso;
+        }
+      }
+      for (const key of Object.keys(state.retired)) {
+        if (seen.has(key)) delete state.retired[key];
       }
       totalFiles += files.length;
       totalUploaded += toUpload.length;
@@ -243,6 +305,23 @@ try {
   await uploader.dispose();
 }
 
+// 过期待删区清理:超过保留期的 key 逐个 DELETE;失败的保留墓碑下次重试。
+// 删除失败不使整次同步失败(上传才是主职责);清单为空时此循环零动作,绝不会误删。
+const dueForDeletion = Object.keys(state.retired).filter(
+  (key) => Number.isFinite(Date.parse(state.retired[key])) && Date.now() - Date.parse(state.retired[key]) > RETENTION_MS,
+);
+if (dueForDeletion.length) {
+  await pool(dueForDeletion, async (key) => {
+    try {
+      await uploader.del(key);
+      delete state.retired[key];
+      totalDeleted += 1;
+    } catch (err) {
+      deleteFailures.push(err.message);
+    }
+  });
+}
+
 fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
 
 if (failures.length) {
@@ -252,4 +331,8 @@ if (failures.length) {
   }
   process.exit(1);
 }
-console.log(`[sync-games] 完成:共 ${totalFiles} 个文件,本次上传 ${totalUploaded},未变跳过 ${totalSkipped}${local ? '(本地模拟)' : '(线上,差分)'}`);
+if (deleteFailures.length) {
+  console.warn(`[sync-games] 待删区清理失败 ${deleteFailures.length} 项(墓碑保留,下次重试):\n${deleteFailures.join('\n')}`);
+}
+console.log(`[sync-games] 完成:共 ${totalFiles} 个文件,本次上传 ${totalUploaded},未变跳过 ${totalSkipped},过期清理删除 ${totalDeleted}${dueForDeletion.length ? '' : '(待删区空)'}`);
+console.log(`[sync-games] 状态清单:${stateFile}(${Object.keys(state.entries).length} 个条目,待删区 ${Object.keys(state.retired).length})${local ? ' —— 本地模拟' : ''}`);

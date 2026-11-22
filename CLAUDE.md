@@ -12,7 +12,7 @@ GameDock([gamedock.cn](https://gamedock.cn))——网页游戏平台:游戏库 +
 ## 工作流
 
 - 平台发布:`npm run deploy`(构建 + wrangler deploy;构建产物不含游戏文件)。
-- 游戏发布:在游戏仓库构建 → `node scripts/sync-games.mjs`(差分上传 R2,内容未变跳过,`--full` 强制全量;`--local` 喂本地模拟);平台无需重新部署。
+- 游戏发布:在游戏仓库构建 → `node scripts/sync-games.mjs`(差分上传 R2,内容未变跳过,`--full` 强制全量;消失的文件进待删区 7 天后删除;`--local` 喂本地模拟);平台无需重新部署。
 - 新增游戏:`server/games.config.json` 声明产物目录 + `src/data/games.json` 加数据,不改平台代码。
 - 本地开发:`npm run dev`(wrangler dev 端口 8787 + vite 5173);游戏首次需 `node scripts/sync-games.mjs --local`。
 
