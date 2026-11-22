@@ -6,10 +6,9 @@
  *   node scripts/sync-games.mjs           # 上传到线上 R2(需 wrangler 登录)
  *   node scripts/sync-games.mjs --local   # 写入本地 wrangler dev 的 R2 模拟(.wrangler/state)
  *
- * 上传通道:
- *   --local 经 getPlatformProxy 单进程直连本地模拟的 R2 绑定(读 wrangler.jsonc,
- *   持久化路径与 wrangler dev 一致),免去每文件一个 CLI 进程的冷启动;
- *   远程模式没有对应的编程接口,仍逐文件调 `wrangler r2 object put`。
+ * 上传通道(都是单进程内并发,不逐文件起 CLI 进程):
+ *   --local 经 getPlatformProxy 直连本地模拟的 R2 绑定(读 wrangler.jsonc);
+ *   远程模式直连 R2 HTTP API,token 取 CLOUDFLARE_API_TOKEN 或 wrangler 登录态。
  *
  * 发布一致性:R2 没有原子目录替换,多文件更新存在短暂不一致窗口。
  * 游戏入口是 index.html,脚本把全部普通文件传完后再写各游戏的 index.html,
@@ -18,8 +17,8 @@
  * 将来投稿/审核流 API 化时再引入精确清理。
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { inferContentType } from '../server/mime.mjs';
 
@@ -27,6 +26,10 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const configPath = path.join(projectRoot, 'server', 'games.config.json');
 const BUCKET = 'gamedock-games';
 const CONCURRENCY = 8;
+// 直连 API 太快会撞 Cloudflare 的速率限制(429)：全局节流 ~10 req/s，配合 429 退避重试。
+const REQUEST_INTERVAL_MS = 100;
+const MAX_ATTEMPTS = 5;
+const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID ?? '603d5e2ca6482dd2a6472c1db04484db';
 
 const local = process.argv.slice(2).includes('--local');
 
@@ -40,29 +43,18 @@ try {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 远程模式:调 wrangler(异步,并发池依赖非阻塞):优先本地 node_modules,否则回退 npx。 */
-function runWrangler(args) {
-  const localBin = path.join(projectRoot, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
-  const useLocal = fs.existsSync(localBin);
-  return new Promise((resolvePromise) => {
-    const child = useLocal
-      ? spawn(process.execPath, [localBin, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
-      : spawn('npx', ['wrangler', ...args], { stdio: ['ignore', 'pipe', 'pipe'], shell: true });
-    let output = '';
-    child.stdout.on('data', (chunk) => {
-      output += chunk;
-    });
-    child.stderr.on('data', (chunk) => {
-      output += chunk;
-    });
-    child.on('close', (code) => resolvePromise({ status: code ?? 1, output }));
-    child.on('error', (err) => resolvePromise({ status: 1, output: String(err) }));
-  });
+/** 全局节流：所有并发 worker 共用一个发牌时钟，保证请求间隔不低于 REQUEST_INTERVAL_MS。 */
+let nextSlot = 0;
+async function waitSlot() {
+  const now = Date.now();
+  const slot = Math.max(now, nextSlot);
+  nextSlot = slot + REQUEST_INTERVAL_MS;
+  if (slot > now) await sleep(slot - now);
 }
 
 /**
  * 上传器:put(key, file, contentType) 抛错即失败。
- * 本地模式经 getPlatformProxy 直连模拟 R2(单进程,快);远程模式逐文件起 wrangler CLI。
+ * 本地模式经 getPlatformProxy 直连模拟 R2,远程模式直连 R2 HTTP API,均单进程并发。
  * 两种通道都可能偶发竞争(与 wrangler dev 共享本地状态库 / 远端限流),重试 3 次兜底。
  */
 async function makeLocalUploader() {
@@ -91,17 +83,50 @@ async function makeLocalUploader() {
   };
 }
 
+/** 远程上传通道：直连 R2 HTTP API（单进程并发 PUT）。
+ *  不用 `wrangler r2 object put` 的原因有二：① wrangler 4.164+ 该命令默认写本地模拟
+ *  存储，需显式 --remote，历史上曾静默传入本地而线上没更新；② 每文件一个 CLI 进程
+ *  冷启动，4000+ 文件要半小时。token 优先取 CLOUDFLARE_API_TOKEN，否则读 wrangler
+ *  OAuth 配置（wrangler login 生成）。 */
+function readApiToken() {
+  if (process.env.CLOUDFLARE_API_TOKEN) return process.env.CLOUDFLARE_API_TOKEN;
+  const configDir = process.env.XDG_CONFIG_HOME
+    ? path.join(process.env.XDG_CONFIG_HOME, '.wrangler', 'config')
+    : process.platform === 'win32'
+      ? path.join(os.homedir(), 'AppData', 'Roaming', 'xdg.config', '.wrangler', 'config')
+      : path.join(os.homedir(), '.config', '.wrangler', 'config');
+  const text = fs.readFileSync(path.join(configDir, 'default.toml'), 'utf8');
+  const match = text.match(/oauth_token\s*=\s*"([^"]+)"/);
+  if (!match) throw new Error('未找到 Cloudflare API token：设置 CLOUDFLARE_API_TOKEN 或先执行 wrangler login');
+  return match[1];
+}
+
 function makeRemoteUploader() {
+  const token = readApiToken();
   const upload = async (key, file, contentType) => {
-    const args = ['r2', 'object', 'put', `${BUCKET}/${key}`, '--file', file, '--content-type', contentType];
-    let lastResult;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      lastResult = await runWrangler(args);
-      if (lastResult.status === 0) return;
-      if (attempt < 3) await sleep(500 * attempt);
+    const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/r2/buckets/${BUCKET}/objects/${key}`;
+    let lastErr;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      try {
+        await waitSlot();
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType },
+          body: fs.readFileSync(file),
+        });
+        if (res.ok) return;
+        const retryAfter = Number(res.headers.get('retry-after'));
+        lastErr = new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        if (res.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+          await sleep(retryAfter * 1000);
+          continue;
+        }
+      } catch (err) {
+        lastErr = err;
+      }
+      if (attempt < MAX_ATTEMPTS) await sleep(500 * 2 ** (attempt - 1));
     }
-    const detail = (lastResult.output || '').trim().split('\n').slice(-3).join('\n');
-    throw new Error(`上传失败 ${key}\n${detail}`);
+    throw new Error(`上传失败 ${key}\n${lastErr?.message ?? ''}`);
   };
   return { put: upload, dispose: async () => {} };
 }
