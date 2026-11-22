@@ -7,6 +7,7 @@ GameDock([gamedock.cn](https://gamedock.cn))——网页游戏平台:游戏库 +
 - [docs/product.md](./docs/product.md):产品需求——用户可见行为的唯一来源(范围、展示原则、账号/好友/存档、浏览与启动、可访问性、验收标准)。
 - [docs/tech.md](./docs/tech.md):技术要求——技术栈、域名与部署形态、路由与启动安全、数据结构、身份会话、测试清单。
 - [docs/multiplayer.md](./docs/multiplayer.md):联机边界——平台不做联机,只做好友邀请(信息传递)与身份凭证。
+- 跨项目平台接缝契约（身份凭证/邀请深链/用户资料/postMessage）:**`../docs/platform-seam.md`**（工作区 docs/，不入库，两侧文档互认的接口定义，修改须双侧同步）。
 
 ## 工作流
 
