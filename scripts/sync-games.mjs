@@ -6,6 +6,7 @@
  *   node scripts/sync-games.mjs           # 差分上传到线上 R2(需 wrangler 登录)
  *   node scripts/sync-games.mjs --full    # 忽略差分清单,强制全量上传
  *   node scripts/sync-games.mjs --local   # 写入本地 wrangler dev 的 R2 模拟(.wrangler/state)
+ *   node scripts/sync-games.mjs --purge-retired  # 本次同步末尾立即 DELETE 全部待删区(跳过 7 天保留期)
  *
  * 上传通道(都是单进程内并发,不逐文件起 CLI 进程):
  *   --local 经 getPlatformProxy 直连本地模拟的 R2 绑定(读 wrangler.jsonc);
@@ -47,6 +48,7 @@ const RETENTION_MS = 7 * 24 * 3600 * 1000;
 const argv = process.argv.slice(2);
 const local = argv.includes('--local');
 const fullSync = argv.includes('--full');
+const purgeRetired = argv.includes('--purge-retired');
 const stateFile = path.join(projectRoot, 'server', local ? '.r2-sync-state.local.json' : '.r2-sync-state.json');
 
 let config;
@@ -307,9 +309,12 @@ try {
 
 // 过期待删区清理:超过保留期的 key 逐个 DELETE;失败的保留墓碑下次重试。
 // 删除失败不使整次同步失败(上传才是主职责);清单为空时此循环零动作,绝不会误删。
-const dueForDeletion = Object.keys(state.retired).filter(
-  (key) => Number.isFinite(Date.parse(state.retired[key])) && Date.now() - Date.parse(state.retired[key]) > RETENTION_MS,
-);
+// --purge-retired 跳过 7 天保留期,本次同步末尾立即 DELETE 全部待删区——
+// 运营显式决策用(2026-11-22 首次使用:流帧拼图替代的逐帧 webp 即时清理;
+// 保留期本为覆盖旧 index.html 与长命标签页,跳过前须自行确认旧客户端窗口可接受)。
+const dueForDeletion = Object.keys(state.retired)
+  .filter((key) => Number.isFinite(Date.parse(state.retired[key])))
+  .filter((key) => purgeRetired || Date.now() - Date.parse(state.retired[key]) > RETENTION_MS);
 if (dueForDeletion.length) {
   await pool(dueForDeletion, async (key) => {
     try {
