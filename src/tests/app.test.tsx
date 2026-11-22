@@ -217,7 +217,7 @@ describe('游戏运行页', () => {
 
   it('固定比例游戏信箱式展示:配置比例兜底,viewport 上报覆盖,非法上报忽略', async () => {
     renderApp(['/play/bvn']);
-    const iframe = await screen.findByTitle('死神 VS 火影 重构版 游戏画面');
+    const iframe = (await screen.findByTitle('死神 VS 火影 重构版 游戏画面')) as HTMLIFrameElement;
     const stage = iframe.parentElement as HTMLElement;
     // 收到上报前用 games.json 的 aspectRatio(5:3)兜底,舞台加信箱式类名
     expect(stage.style.aspectRatio).toBe(String(5 / 3));

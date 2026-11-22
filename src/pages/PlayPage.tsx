@@ -109,22 +109,47 @@ export function PlayPage() {
   }
 
   return (
-    <div className="page play-page" ref={stageRef}>
+    <div className="page play-page">
       <header className="play-header">
         <h1 className="play-title">{game.title}</h1>
         <div className="play-account-actions">
           <SocialEntry />
           <UserArea />
         </div>
-        <button type="button" className="btn btn-secondary" onClick={toggleFullscreen}>
-          {isFullscreen ? '退出全屏' : '全屏'}
+        <button
+          type="button"
+          className="btn btn-icon play-fullscreen-toggle"
+          aria-label={isFullscreen ? '退出全屏' : '全屏'}
+          title={isFullscreen ? '退出全屏' : '全屏'}
+          onClick={toggleFullscreen}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            {isFullscreen ? (
+              <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            )}
+          </svg>
         </button>
       </header>
-      <GameFrame
-        game={game}
-        src={resolution.url}
-        user={status === 'user' && user ? { id: user.id, username: user.username } : null}
-      />
+      <main className="play-main" ref={stageRef}>
+        <GameFrame
+          game={game}
+          src={resolution.url}
+          user={status === 'user' && user ? { id: user.id, username: user.username } : null}
+        />
+        <button
+          type="button"
+          className="btn btn-icon play-fullscreen-exit"
+          aria-label="退出全屏"
+          title="退出全屏"
+          onClick={toggleFullscreen}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </main>
     </div>
   );
 }
