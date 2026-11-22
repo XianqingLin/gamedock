@@ -3,19 +3,27 @@
  * key 规则与 worker(server/game-assets.mjs)一致:`g/<slug>/<相对路径>`。
  *
  * 用法:
- *   node scripts/sync-games.mjs           # 上传到线上 R2(需 wrangler 登录)
+ *   node scripts/sync-games.mjs           # 差分上传到线上 R2(需 wrangler 登录)
+ *   node scripts/sync-games.mjs --full    # 忽略差分清单,强制全量上传
  *   node scripts/sync-games.mjs --local   # 写入本地 wrangler dev 的 R2 模拟(.wrangler/state)
  *
  * 上传通道(都是单进程内并发,不逐文件起 CLI 进程):
  *   --local 经 getPlatformProxy 直连本地模拟的 R2 绑定(读 wrangler.jsonc);
  *   远程模式直连 R2 HTTP API,token 取 CLOUDFLARE_API_TOKEN 或 wrangler 登录态。
  *
+ * 差分上传:成功上传的文件按 `R2 key → 内容 md5` 记入本地状态清单
+ * (远程 `server/.r2-sync-state.json`,本地模拟 `server/.r2-sync-state.local.json`,
+ * 均不入库);下次同步内容未变的文件直接跳过,重复部署从全量 ~8 分钟降到秒级。
+ * 状态文件丢失 = 自动退化为一次全量(多传不漏传);`--full` 强制全量重建清单。
+ * 前提:本脚本是唯一发布口——绕过脚本手工改 R2 会让清单失真(漏传),此时用 --full。
+ * 清单按 slug 剪枝:产物中已消失的条目随本次同步移除(R2 侧旧对象本就不删除)。
+ *
  * 发布一致性:R2 没有原子目录替换,多文件更新存在短暂不一致窗口。
  * 游戏入口是 index.html,脚本把全部普通文件传完后再写各游戏的 index.html,
- * 更新期间旧 index.html 引用的旧资源始终可用,不一致窗口压到几乎为零。
- * 旧文件不删除(R2 无 list 级 CLI),多传的对象只占空间不碍事;
- * 将来投稿/审核流 API 化时再引入精确清理。
+ * 更新期间旧 index.html 引用的旧资源始终可用,不一致窗口压到几乎为零;
+ * index.html 不参与差分、每次无条件重写,该语义保持不变。
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,7 +39,10 @@ const REQUEST_INTERVAL_MS = 100;
 const MAX_ATTEMPTS = 5;
 const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID ?? '603d5e2ca6482dd2a6472c1db04484db';
 
-const local = process.argv.slice(2).includes('--local');
+const argv = process.argv.slice(2);
+const local = argv.includes('--local');
+const fullSync = argv.includes('--full');
+const stateFile = path.join(projectRoot, 'server', local ? '.r2-sync-state.local.json' : '.r2-sync-state.json');
 
 let config;
 try {
@@ -42,6 +53,18 @@ try {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 差分状态清单:`{ version, entries: { r2key: md5hex } }`。读取失败按空清单处理(退化为全量)。 */
+function loadState() {
+  if (fullSync) return { version: 1, entries: {} };
+  try {
+    const raw = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    if (raw?.version === 1 && raw.entries && typeof raw.entries === 'object') return raw;
+  } catch {}
+  return { version: 1, entries: {} };
+}
+
+const md5 = (file) => crypto.createHash('md5').update(fs.readFileSync(file)).digest('hex');
 
 /** 全局节流：所有并发 worker 共用一个发牌时钟，保证请求间隔不低于 REQUEST_INTERVAL_MS。 */
 let nextSlot = 0;
@@ -155,13 +178,16 @@ async function pool(items, worker) {
   await Promise.all(runners);
 }
 
-let totalFiles = 0;
-const failures = [];
-
+const state = loadState();
 const uploader = local ? await makeLocalUploader().catch((err) => {
   console.error(`[sync-games] 初始化本地上传通道失败:${err.message}`);
   process.exit(1);
 }) : makeRemoteUploader();
+
+let totalFiles = 0;
+let totalUploaded = 0;
+let totalSkipped = 0;
+const failures = [];
 
 try {
   for (const slug of Object.keys(config)) {
@@ -173,14 +199,42 @@ try {
 
     const files = walk(source);
     const indexes = files.filter((f) => f.endsWith('/index.html') || f === 'index.html');
-    const assets = files.filter((f) => !indexes.includes(f));
-    const upload = (rel) => uploader.put(`g/${slug}/${rel}`, path.join(source, rel.split('/').join(path.sep)), inferContentType(rel));
+    const toUpload = []; // { key, rel, file, hash }
+    let skipped = 0;
+    const seen = new Set();
+
+    for (const rel of files) {
+      const key = `g/${slug}/${rel}`;
+      seen.add(key);
+      const file = path.join(source, rel.split('/').join(path.sep));
+      const hash = md5(file);
+      // index.html 不差分,恒重写(压不一致窗口的语义依赖它最后落笔)。
+      if (!indexes.includes(rel) && state.entries[key] === hash) {
+        skipped += 1;
+        continue;
+      }
+      toUpload.push({ key, rel, file, hash });
+    }
 
     try {
-      await pool(assets, upload);
-      await pool(indexes, upload);
+      // 先普通文件后 index.html;成功的 put 即记入清单,失败项不记(下次重传)。
+      const assets = toUpload.filter((u) => !indexes.includes(u.rel));
+      const indexUploads = toUpload.filter((u) => indexes.includes(u.rel));
+      const put = async (u, contentType) => {
+        await uploader.put(u.key, u.file, contentType ?? inferContentType(u.rel));
+        state.entries[u.key] = u.hash;
+      };
+      await pool(assets, (u) => put(u));
+      await pool(indexUploads, (u) => put(u));
+      // 按 slug 剪枝:本次产物里已消失的条目移出清单。
+      const prefix = `g/${slug}/`;
+      for (const key of Object.keys(state.entries)) {
+        if (key.startsWith(prefix) && !seen.has(key)) delete state.entries[key];
+      }
       totalFiles += files.length;
-      console.log(`[sync-games] ${slug}:${files.length} 个文件 → ${BUCKET}/g/${slug}/`);
+      totalUploaded += toUpload.length;
+      totalSkipped += skipped;
+      console.log(`[sync-games] ${slug}:上传 ${toUpload.length} / 未变跳过 ${skipped},共 ${files.length} 个文件 → ${BUCKET}/g/${slug}/`);
     } catch (err) {
       failures.push(`${slug}: ${err.message}`);
     }
@@ -189,11 +243,13 @@ try {
   await uploader.dispose();
 }
 
+fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
+
 if (failures.length) {
-  console.error(`[sync-games] 失败 ${failures.length} 项:\n${failures.join('\n')}`);
+  console.error(`[sync-games] 失败 ${failures.length} 项(未记入清单,下次自动重传):\n${failures.join('\n')}`);
   if (!local && failures.some((f) => f.includes('30003') || f.includes('not found'))) {
     console.error('提示:bucket 可能不存在,先执行 npx wrangler r2 bucket create gamedock-games');
   }
   process.exit(1);
 }
-console.log(`[sync-games] 完成:共 ${totalFiles} 个文件${local ? '(本地模拟)' : '(线上)'}`);
+console.log(`[sync-games] 完成:共 ${totalFiles} 个文件,本次上传 ${totalUploaded},未变跳过 ${totalSkipped}${local ? '(本地模拟)' : '(线上,差分)'}`);
