@@ -51,6 +51,9 @@
 - 静态资源缓存分层(2026-11-22):index.html 不缓存(永不进边缘缓存);`<slug>/assets/*` 为
   Vite 内容哈希块 → `max-age=31536000, immutable`(文件名即版本);其余游戏数据(baked/
   图集/音频)→ `max-age=86400`(发布后 ≤1 天收敛,与原 nginx `expires 1d` 同取舍)。
+  带 `?v=` 的请求(2026-11-22 追加):客户端(web-bvn asset-versioning)对游戏资产 URL
+  追加 8 位内容指纹 `?v=<hash>`——内容变 URL 变,服务端按 `immutable` 下发,回头客
+  只拉真正变过的文件;无指纹旧客户端维持上表,双轨兼容。
   边缘缓存用 Cache API(仅生产 worker 路径,`X-Cache: HIT/MISS` 可验收);带 If-None-Match
   的数据资产请求绕过边缘直连 R2 `head()` 协商——边缘不得拿旧 ETag 回 304,否则更新永不到达。
   按需加载。

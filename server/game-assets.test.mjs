@@ -49,6 +49,7 @@ const R2 = createR2Mock({
   'g/bvn/assets/index-AbC.js': 'export default 1',
   'g/bvn/assets/logo.svg': '<svg/>',
   'g/bvn/packages/data/assets/fighters/x.webp': 'webp',
+  'g/bvn/packages/data/baked/x.json': '{"ok":true}',
   'g/tether-together/data.bin': '0123456789',
   'g/meta/index.html': '<html>meta</html>',
 });
@@ -101,6 +102,23 @@ describe('handleGameAsset R2 静态资源服务', () => {
     expect(nested.headers.get('Cache-Control')).toBe('public, max-age=86400');
     // 测试环境无 ctx → 不走边缘缓存
     expect(hashed.headers.get('X-Cache')).toBe('MISS');
+  });
+
+  it('?v= 指纹 URL → immutable(任意路径;无指纹同路径维持原策略)', async () => {
+    const data = await handleGameAsset(request('/g/bvn/packages/data/baked/x.json?v=f7bede49'), {
+      GAMES: R2,
+    });
+    const audio = await handleGameAsset(
+      request('/g/bvn/packages/data/assets/fighters/x.webp?v=abcd1234'),
+      { GAMES: R2 },
+    );
+    expect(data.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    expect(audio.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    // 无指纹的同路径维持一天策略
+    const sameUnversioned = await handleGameAsset(request('/g/bvn/packages/data/baked/x.json'), {
+      GAMES: R2,
+    });
+    expect(sameUnversioned.headers.get('Cache-Control')).toBe('public, max-age=86400');
   });
 
   it('未命中 → 404', async () => {
