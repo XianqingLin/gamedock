@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { chatApi } from '../lib/api';
 import type { ChatMessage } from '../lib/api';
-import { ApiError } from '../lib/api';
 
 interface ChatBoxProps {
   peerId: string;
   peerName: string;
 }
 
+/** 聊天历史轮询间隔:好友间聊天无推送,打开期间靠轮询收对方的新消息。 */
+const POLL_INTERVAL_MS = 4000;
+
 /**
- * 与「小舟AI」的聊天框:打开时加载历史,发送后由服务端一并返回用户消息与 AI 回复;
- * 发送失败展示服务端错误文案,不假装成功。
+ * 好友间聊天框(测试用户 bot 由服务端自动回复):打开时加载历史,发送后服务端
+ * 返回本端消息(bot 会话还带自动回复);打开期间轮询历史,收到对方新消息即上屏。
+ * 发送失败展示服务端错误文案,不假装成功;输入内容在成功前不清空。
  */
 export function ChatBox({ peerId, peerName }: ChatBoxProps) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
@@ -36,6 +39,20 @@ export function ChatBox({ peerId, peerName }: ChatBoxProps) {
     };
   }, [peerId]);
 
+  // 打开期间轮询:拉取服务端最新历史(整表刷新,消息量 ≤100,替换渲染)。
+  useEffect(() => {
+    if (messages === null) return;
+    const timer = window.setInterval(() => {
+      chatApi
+        .history(peerId)
+        .then((data) => setMessages(data.messages))
+        .catch(() => {
+          // 轮询失败静默:下个周期重试,不打断输入中的用户。
+        });
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [peerId, messages === null]);
+
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
@@ -46,20 +63,15 @@ export function ChatBox({ peerId, peerName }: ChatBoxProps) {
     if (!text || busy) return;
     setError(null);
     setBusy(true);
-    setInput('');
     try {
       const data = await chatApi.send(peerId, text);
-      setMessages((prev) => [...(prev ?? []), ...data.messages]);
+      setInput('');
+      setMessages((prev) => {
+        const known = new Set((prev ?? []).map((m) => m.id));
+        return [...(prev ?? []), ...data.messages.filter((m) => !known.has(m.id))];
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : '发送失败,请稍后重试');
-      // 5xx 表示 AI 回复环节失败,用户消息已在服务端落库,本地补显避免消息凭空消失;
-      // 关闭重开聊天框时会从服务端历史加载同一条消息。
-      if (err instanceof ApiError && err.status >= 500) {
-        setMessages((prev) => [
-          ...(prev ?? []),
-          { id: `local-${Date.now()}`, peer: peerId, role: 'user', content: text, createdAt: new Date().toISOString() },
-        ]);
-      }
     } finally {
       setBusy(false);
     }
@@ -74,7 +86,7 @@ export function ChatBox({ peerId, peerName }: ChatBoxProps) {
           <p className="chat-status">和{peerName}打个招呼吧。</p>
         ) : (
           messages?.map((message) => (
-            <div key={message.id} className={`chat-message chat-message-${message.role}`}>
+            <div key={message.id} className={`chat-message chat-message-${message.mine ? 'mine' : 'their'}`}>
               <p>{message.content}</p>
             </div>
           ))

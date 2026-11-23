@@ -1,4 +1,5 @@
 import { hashPassword, verifyPassword } from './password.mjs';
+import { TEST_USER, ensureTestUser, ensureTestUserFriend } from './bot.mjs';
 
 export const USERNAME_PATTERN = /^[a-zA-Z0-9_一-龥]{2,24}$/u;
 
@@ -7,7 +8,7 @@ export const USERNAME_PATTERN = /^[a-zA-Z0-9_一-龥]{2,24}$/u;
 const USER_ID_MIN = 1_000_000;
 const USER_ID_RANGE = 99_000_000;
 
-// 头像预设编号:av0 = 小舟AI 专属,av1~av16 = 用户可选(清单见前端 src/data/avatars.tsx)。
+// 头像预设编号:av0 = 测试用户 bot 专属,av1~av16 = 用户可选(清单见前端 src/data/avatars.tsx)。
 export const AVATAR_ID_PATTERN = /^av(?:0|[1-9]|1[0-6])$/;
 
 /** [USER_ID_MIN, USER_ID_MIN + USER_ID_RANGE) 内的无偏随机整数,返回十进制字符串。 */
@@ -42,6 +43,8 @@ export async function findUserByUsername(store, username) {
 
 /** 注册:校验 + 唯一性检查 + 哈希落库。返回 {ok, user|error}。 */
 export async function registerUser(store, { username, password }) {
+  // 先确保测试用户 bot 存在:其用户名是保留名,注册校验需要它已在库中。
+  await ensureTestUser(store);
   const invalid = validateRegistration(username, password);
   if (invalid) return { ok: false, error: invalid };
   if (await findUserByUsername(store, username)) return { ok: false, error: '用户名已存在' };
@@ -52,6 +55,8 @@ export async function registerUser(store, { username, password }) {
     const user = { id: randomUserId(), username, passSalt: salt, passHash: hash, createdAt };
     try {
       await store.insertUser(user);
+      // 新用户默认与测试用户互为好友(好友聊天/邀请功能的自测端)。
+      await ensureTestUserFriend(store, user.id);
       return { ok: true, user };
     } catch (err) {
       const message = String(err?.message ?? '');

@@ -212,6 +212,19 @@ input {
   cursor: not-allowed;
 }
 
+/* 破坏性主操作(删除好友二次确认):红色但克制,深色主题下仅用饱和红。 */
+.btn-danger {
+  background: #c5303c;
+  border-color: #c5303c;
+  color: #f6f6f6;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #d9434f;
+  border-color: #d9434f;
+}
+
+
 .btn-secondary {
   background: transparent;
   border-color: var(--line);
@@ -2003,6 +2016,136 @@ input {
   line-height: 1.6;
 }
 
+/* 邀请分隔小标题(仅当有待处理邀请时出现)。 */
+.friend-invites-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px -10px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.friend-invites-caption span {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* 待处理游戏邀请行:发起人 + 「邀请你游玩《X》」+ 进入/忽略。 */
+.friend-invite {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 4px 10px;
+  margin: 0 -10px;
+  border-radius: 10px;
+  background: rgba(79, 179, 169, 0.08);
+}
+
+.friend-invite-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.friend-invite-game {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* bot 行右侧的「测试」角标:说明该固定好友是内置测试用户。 */
+.friend-row-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 好友右键操作菜单:跟随指针的小型浮层。 */
+.friend-menu {
+  position: fixed;
+  z-index: 130;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.friend-menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.friend-menu-item:hover:not(:disabled),
+.friend-menu-item:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.friend-menu-item:disabled {
+  color: #55555e;
+  cursor: default;
+}
+
+.friend-menu-danger {
+  color: #e5484d;
+}
+
+/* 邀请已发送的成功提示(与错误同槽位,3 秒自动消失)。 */
+.friends-status-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* 删除好友二次确认弹窗(叠加在好友抽屉之上)。 */
+.confirm-overlay {
+  z-index: 130;
+}
+
+.confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 280px;
+}
+
+.confirm-dialog p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+
 /* ---------- 聊天框(叠加在好友抽屉之上) ---------- */
 
 .chat-overlay {
@@ -2051,17 +2194,18 @@ input {
   margin: 0;
 }
 
-.chat-message-user {
+.chat-message-mine {
   align-self: flex-end;
   background: var(--accent);
   color: var(--accent-ink);
 }
 
-.chat-message-assistant {
+.chat-message-their {
   align-self: flex-start;
   background: #242429;
   color: #e6e6ea;
 }
+
 
 .chat-input {
   display: flex;

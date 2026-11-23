@@ -3,8 +3,9 @@ import type { ReactNode } from 'react';
 /**
  * 系统预设头像(内置 SVG,深色主题配色)。
  * 编号 av0~av16 与服务端 server/auth.mjs 的 AVATAR_ID_PATTERN 一一对应:
- * av0 = 「小舟AI」专属,av1~av16 = 用户可选;两侧清单修改必须同步。
+ * av0 = 「测试用户」bot 专属,av1~av16 = 用户可选;两侧清单修改必须同步。
  */
+
 export interface AvatarPreset {
   id: string;
   label: string;
@@ -14,7 +15,7 @@ export interface AvatarPreset {
 export const PRESET_AVATARS: AvatarPreset[] = [
   {
     id: 'av0',
-    label: '小舟AI',
+    label: '测试用户',
     svg: (
       <>
         <circle cx="16" cy="16" r="16" fill="#4fb3a9" />
@@ -226,8 +227,9 @@ export const PRESET_AVATARS: AvatarPreset[] = [
   },
 ];
 
-/** 用户可选预设(av0 为小舟AI 专属,不进选择网格)。 */
+/** 用户可选预设(av0 为测试用户 bot 专属,不进选择网格)。 */
 export const USER_SELECTABLE_AVATARS = PRESET_AVATARS.filter((preset) => preset.id !== 'av0');
+
 
 export function getPresetAvatar(id: string): AvatarPreset | null {
   return PRESET_AVATARS.find((preset) => preset.id === id) ?? null;

@@ -33,11 +33,32 @@ function chatMessageFromRow(row) {
   if (!row) return null;
   return {
     id: row.id,
-    userId: row.user_id,
-    peerId: row.peer_id,
-    role: row.role,
+    fromId: row.from_id,
+    toId: row.to_id,
     content: row.content,
     createdAt: row.created_at,
+  };
+}
+
+function inviteFromRow(row) {
+  if (!row) return null;
+  let params = null;
+  if (row.params) {
+    try {
+      params = JSON.parse(row.params);
+    } catch {
+      params = null;
+    }
+  }
+  return {
+    id: row.id,
+    fromUser: row.from_user,
+    toUser: row.to_user,
+    slug: row.slug,
+    params,
+    status: row.status,
+    createdAt: row.created_at,
+    respondedAt: row.responded_at ?? undefined,
   };
 }
 
@@ -56,9 +77,17 @@ export function createD1Store(d1) {
     async insertUser(user) {
       await d1
         .prepare(
-          'INSERT INTO users (id, username, username_lower, pass_salt, pass_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO users (id, username, username_lower, pass_salt, pass_hash, created_at, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)',
         )
-        .bind(user.id, user.username, user.username.toLowerCase(), user.passSalt, user.passHash, user.createdAt)
+        .bind(
+          user.id,
+          user.username,
+          user.username.toLowerCase(),
+          user.passSalt,
+          user.passHash,
+          user.createdAt,
+          user.avatar ?? null,
+        )
         .run();
     },
 
@@ -134,20 +163,60 @@ export function createD1Store(d1) {
     async insertChatMessage(record) {
       await d1
         .prepare(
-          'INSERT INTO chat_messages (id, user_id, peer_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO chat_messages (id, from_id, to_id, content, created_at) VALUES (?, ?, ?, ?, ?)',
         )
-        .bind(record.id, record.userId, record.peerId, record.role, record.content, record.createdAt)
+        .bind(record.id, record.fromId, record.toId, record.content, record.createdAt)
         .run();
     },
 
-    async listChatMessages(userId, peerId, limit) {
+    async listChatMessagesBetween(userA, userB, limit) {
       const { results } = await d1
         .prepare(
-          'SELECT * FROM chat_messages WHERE user_id = ? AND peer_id = ? ORDER BY rowid DESC LIMIT ?',
+          `SELECT * FROM chat_messages
+           WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)
+           ORDER BY rowid DESC LIMIT ?`,
         )
-        .bind(userId, peerId, limit)
+        .bind(userA, userB, userB, userA, limit)
         .all();
       return results.reverse().map(chatMessageFromRow);
+    },
+
+    async insertInvite(record) {
+      await d1
+        .prepare(
+          'INSERT INTO game_invites (id, from_user, to_user, slug, params, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        )
+        .bind(
+          record.id,
+          record.fromUser,
+          record.toUser,
+          record.slug,
+          record.params === null ? null : JSON.stringify(record.params),
+          record.status,
+          record.createdAt,
+        )
+        .run();
+    },
+
+    async getInvite(id) {
+      const row = await d1.prepare('SELECT * FROM game_invites WHERE id = ?').bind(id).first();
+      return inviteFromRow(row);
+    },
+
+    async listPendingInvitesFor(toUserId) {
+      const { results } = await d1
+        .prepare('SELECT * FROM game_invites WHERE to_user = ? AND status = ? ORDER BY rowid')
+        .bind(toUserId, 'pending')
+        .all();
+      return results.map(inviteFromRow);
+    },
+
+    async updateInvite(id, patch) {
+      if (patch.status === undefined) return;
+      await d1
+        .prepare('UPDATE game_invites SET status = ?, responded_at = ? WHERE id = ?')
+        .bind(patch.status, patch.respondedAt ?? null, id)
+        .run();
     },
 
     async updateLastSeen(userId, isoTime) {

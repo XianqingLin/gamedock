@@ -10,8 +10,8 @@ export interface FriendEntry {
   id: string;
   user: Pick<ApiUser, 'id' | 'username' | 'avatar'> & { online?: boolean };
   since: string;
-  /** 固定 AI 助手(不可删除,点击打开聊天)。 */
-  assistant?: boolean;
+  /** 固定测试用户 bot(不可删除、恒在线、自动回复)。 */
+  bot?: boolean;
 }
 
 export interface IncomingRequestEntry {
@@ -26,21 +26,36 @@ export interface OutgoingRequestEntry {
   createdAt: string;
 }
 
+export interface GameInviteEntry {
+  id: string;
+  from: Pick<ApiUser, 'id' | 'username' | 'avatar'>;
+  slug: string;
+  /** 游戏自定义加入参数(平台不解析,原样透传给游戏)。 */
+  params: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface FriendLists {
   /** 当前登录用户自身状态,与好友共用同一份 last_seen_at 判定。 */
   me: { id: string; username: string; online?: boolean; avatar?: string | null };
   friends: FriendEntry[];
   incoming: IncomingRequestEntry[];
   outgoing: OutgoingRequestEntry[];
+  /** 待处理的游戏邀请(仅信息传递;好友列表顶部固定展示)。 */
+  invites: GameInviteEntry[];
 }
+
 
 export interface ChatMessage {
   id: string;
+  /** 对方用户 ID(聊天是好友间双向会话)。 */
   peer: string;
-  role: 'user' | 'assistant';
+  /** 是否本端发出。 */
+  mine: boolean;
   content: string;
   createdAt: string;
 }
+
 
 export class ApiError extends Error {
   constructor(
@@ -90,7 +105,18 @@ export const friendsApi = {
     apiRequest<FriendLists>(`/api/friends/requests/${requestId}/${accept ? 'accept' : 'decline'}`, { method: 'POST' }),
   cancel: (requestId: string) => apiRequest<FriendLists>(`/api/friends/requests/${requestId}`, { method: 'DELETE' }),
   remove: (friendshipId: string) => apiRequest<FriendLists>(`/api/friends/${friendshipId}`, { method: 'DELETE' }),
+  /** 游戏邀请(仅信息传递):params 为游戏上报的加入参数,平台原样透传。 */
+  sendInvite: (to: string, slug: string, params: Record<string, unknown> | null) =>
+    apiRequest<{ ok: true }>('/api/invites', { method: 'POST', body: { to, slug, params } }),
+  respondInvite: (inviteId: string, accept: boolean) =>
+    apiRequest<{ ok: true }>(`/api/invites/${inviteId}/${accept ? 'accept' : 'decline'}`, { method: 'POST' }),
+  /** 运行页取邀请(任意状态;刷新后可重取加入参数)。 */
+  getInvite: (inviteId: string) =>
+    apiRequest<{ invite: { slug: string; params: Record<string, unknown> | null } }>(
+      `/api/invites/${encodeURIComponent(inviteId)}`,
+    ),
 };
+
 
 export const chatApi = {
   history: (peer: string) => apiRequest<{ messages: ChatMessage[] }>(`/api/chat/${encodeURIComponent(peer)}`),

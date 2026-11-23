@@ -1,6 +1,15 @@
 import { registerUser, verifyLogin, publicUser, updateProfile } from './auth.mjs';
 import { sendFriendRequest, respondToRequest, cancelRequest, removeFriend, listFriends } from './friends.mjs';
+import { listGameInvites } from './invites.mjs';
 import { listChatMessages, sendChatMessage } from './chat.mjs';
+
+import {
+  sendGameInvite,
+  listGameInvites,
+  acceptGameInvite,
+  declineGameInvite,
+  getGameInvite,
+} from './invites.mjs';
 import {
   SESSION_COOKIE,
   parseCookies,
@@ -20,7 +29,8 @@ const encoder = new TextEncoder();
  * 平台 HTTP API(Web 风格:Request 进 Response 出,Workers 与测试共用)。
  * env 形状:{ store, saves, sessionSecret, gameSlugs, gamesData, gameOrigin }
  * - /api/auth/*:注册、登录、登出、当前用户(httpOnly Cookie 会话)
- * - /api/friends*:好友关系(需登录;首版无在线状态)
+ * - /api/friends*:好友关系(需登录);/api/chat*:好友间聊天(测试用户 bot 自动回复)
+ * - /api/invites*:好友邀请(仅信息传递,slug + 游戏透传参数)
  * - /api/saves*:平台存档(需登录;slug 须为已接入游戏,值对平台不透明)
  * - /api/games、/api/health:公开
  * - CORS:仅对游戏内容域(gameOrigin)与请求自身源开放,且允许携带凭据——
@@ -101,6 +111,7 @@ async function routeApi(request, env) {
   if (await handleAuthApi(ctx, pathname)) return ctx.response;
   if (await handleFriendsApi(ctx, pathname)) return ctx.response;
   if (await handleChatApi(ctx, pathname)) return ctx.response;
+  if (await handleInvitesApi(ctx, pathname)) return ctx.response;
   if (await handleSavesApi(ctx, pathname)) return ctx.response;
 
   return sendJson(404, { error: '接口不存在' });
@@ -211,8 +222,15 @@ async function handleFriendsApi(ctx, pathname) {
   const user = await requireAuth(ctx);
   if (!user) return true;
 
+  /** 好友列表统一载荷:好友/请求 + 待处理游戏邀请(好友面板一次拉全)。 */
+  const listsPayload = async () => {
+    const lists = await listFriends(env.store, user.id);
+    const invites = await listGameInvites(env.store, user.id);
+    return { ...lists, invites: invites.invites };
+  };
+
   if (pathname === '/api/friends' && method === 'GET') {
-    return respond(ctx, sendJson(200, await listFriends(env.store, user.id)));
+    return respond(ctx, sendJson(200, await listsPayload()));
   }
 
   const requestAction = /^\/api\/friends\/requests\/([\w-]+)\/(accept|decline)$/.exec(pathname);
@@ -220,7 +238,7 @@ async function handleFriendsApi(ctx, pathname) {
     const [, requestId, action] = requestAction;
     const result = await respondToRequest(env.store, user.id, requestId, action === 'accept');
     if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
-    return respond(ctx, sendJson(200, await listFriends(env.store, user.id)));
+    return respond(ctx, sendJson(200, await listsPayload()));
   }
 
   if (pathname === '/api/friends/requests' && method === 'POST') {
@@ -228,29 +246,29 @@ async function handleFriendsApi(ctx, pathname) {
     if (!body) return respond(ctx, sendJson(400, { error: '请求体无效' }));
     const result = await sendFriendRequest(env.store, user.id, body.id);
     if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
-    return respond(ctx, sendJson(200, await listFriends(env.store, user.id)));
+    return respond(ctx, sendJson(200, await listsPayload()));
   }
 
   const cancelMatch = /^\/api\/friends\/requests\/([\w-]+)$/.exec(pathname);
   if (cancelMatch && method === 'DELETE') {
     const result = await cancelRequest(env.store, user.id, cancelMatch[1]);
     if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
-    return respond(ctx, sendJson(200, await listFriends(env.store, user.id)));
+    return respond(ctx, sendJson(200, await listsPayload()));
   }
 
   const friendMatch = /^\/api\/friends\/([\w-]+)$/.exec(pathname);
   if (friendMatch && method === 'DELETE') {
     const result = await removeFriend(env.store, user.id, friendMatch[1]);
     if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
-    return respond(ctx, sendJson(200, await listFriends(env.store, user.id)));
+    return respond(ctx, sendJson(200, await listsPayload()));
   }
 
   return respond(ctx, sendJson(404, { error: '接口不存在' }));
 }
 
 /**
- * 平台聊天:GET /api/chat/:peer(历史)、POST /api/chat/:peer(发送,返回用户消息 + AI 回复)。
- * 需登录;当前仅 AI 助手「小舟AI」一个会话(peer 固定),AI 配置见 env.ai。
+ * 平台聊天:GET /api/chat/:peer(历史)、POST /api/chat/:peer(发送)。
+ * 需登录;peer 必须是已接受好友(测试用户 bot 固定可聊,发送后服务端自动回复)。
  */
 async function handleChatApi(ctx, pathname) {
   if (!pathname.startsWith('/api/chat')) return false;
@@ -272,13 +290,59 @@ async function handleChatApi(ctx, pathname) {
   if (method === 'POST') {
     const body = await readJsonBody(ctx.request);
     if (!body) return respond(ctx, sendJson(400, { error: '请求体无效' }));
-    const result = await sendChatMessage(env.store, user.id, peerId, body.content, env.ai);
+    const result = await sendChatMessage(env.store, user.id, peerId, body.content);
     if (!result.ok) {
-      // AI 环节失败(用户消息已落库)返回 5xx,入参校验错误返回 400——前端据此决定是否补显用户消息。
-      const status = result.code === 'ai_unconfigured' ? 503 : result.code ? 502 : 400;
-      return respond(ctx, sendJson(status, { error: result.error }));
+      const notFound = result.error === '会话不存在';
+      return respond(ctx, sendJson(notFound ? 404 : 400, { error: result.error }));
     }
     return respond(ctx, sendJson(200, { messages: result.messages }));
+  }
+
+  return respond(ctx, sendJson(404, { error: '接口不存在' }));
+}
+
+/**
+ * 好友邀请(仅信息传递):
+ * - POST /api/invites {to, slug, params}:发出邀请(对方须为好友;params 为游戏透传参数)
+ * - GET /api/invites:接收方的待处理邀请列表
+ * - GET /api/invites/:id:接收方取单条(运行页拿 params;刷新可重取)
+ * - POST /api/invites/:id/accept:接收方「进入」
+ * - POST /api/invites/:id/decline:接收方「忽略」
+ */
+async function handleInvitesApi(ctx, pathname) {
+  if (!pathname.startsWith('/api/invites')) return false;
+  const { env, method } = ctx;
+
+  const user = await requireAuth(ctx);
+  if (!user) return true;
+
+  if (pathname === '/api/invites' && method === 'GET') {
+    const result = await listGameInvites(env.store, user.id);
+    if (!result.ok) return respond(ctx, sendJson(500, { error: result.error }));
+    return respond(ctx, sendJson(200, { invites: result.invites }));
+  }
+
+  if (pathname === '/api/invites' && method === 'POST') {
+    const body = await readJsonBody(ctx.request);
+    if (!body) return respond(ctx, sendJson(400, { error: '请求体无效' }));
+    const result = await sendGameInvite(env.store, user.id, body, env.gameSlugs);
+    if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
+    return respond(ctx, sendJson(200, { ok: true }));
+  }
+
+  const match = /^\/api\/invites\/([\w-]+)(?:\/(accept|decline))?$/.exec(pathname);
+  if (match && (method === 'GET' || method === 'POST')) {
+    const [, inviteId, action] = match;
+    if (method === 'GET') {
+      const result = await getGameInvite(env.store, user.id, inviteId);
+      if (!result.ok) return respond(ctx, sendJson(404, { error: result.error }));
+      return respond(ctx, sendJson(200, { invite: result.invite }));
+    }
+    const result = action === 'accept'
+      ? await acceptGameInvite(env.store, user.id, inviteId)
+      : await declineGameInvite(env.store, user.id, inviteId);
+    if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
+    return respond(ctx, sendJson(200, action === 'accept' ? { invite: result.invite } : { ok: true }));
   }
 
   return respond(ctx, sendJson(404, { error: '接口不存在' }));

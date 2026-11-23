@@ -32,7 +32,13 @@ export interface PlatformHelloMessage {
   platform: string;
   slug: string;
   user: PlatformUser | null;
+  /**
+   * 邀请加入参数(2026-11-23,好友邀请深链):经邀请打开运行页时携带,
+   * 值为游戏自定义的参数对象(如 { room, node },平台只透传、不解析);无邀请时缺省为 null。
+   */
+  join?: Record<string, unknown> | null;
 }
+
 
 export interface GameMessage {
   v: number;
@@ -74,8 +80,11 @@ export interface GameDockSdk {
   readonly user: PlatformUser | null;
   /** 当前游戏 slug(来自 hello);standalone 为 null。 */
   readonly slug: string | null;
+  /** 邀请加入参数(来自 hello;平台只透传,游戏自行解析与消费);无邀请或 standalone 为 null。 */
+  readonly join: Record<string, unknown> | null;
   /** 未在平台内运行时为 true。 */
   readonly standalone: boolean;
+
   /** 订阅平台消息(platform: 前缀,信封已校验)。返回退订函数。 */
   onPlatformMessage(handler: (message: GameMessage) => void): () => void;
   /** 向平台发消息,自动补 v。 */
@@ -161,7 +170,9 @@ function createStandaloneSdk(): GameDockSdk {
   return {
     user: null,
     slug: null,
+    join: null,
     standalone: true,
+
     onPlatformMessage: () => () => {},
     send: () => {},
     reportViewport: () => {},
@@ -218,7 +229,9 @@ function createConnectedSdk(env: GameDockEnv, hello: PlatformHelloMessage): Game
   return {
     user: hello.user,
     slug: hello.slug,
+    join: hello.join ?? null,
     standalone: false,
+
     onPlatformMessage(handler) {
       handlers.add(handler);
       return () => handlers.delete(handler);

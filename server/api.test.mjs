@@ -144,15 +144,18 @@ describe('好友 HTTP 流程', () => {
 
     const accepted = await b.request('POST', `/api/friends/requests/${requestId}/accept`);
     expect(accepted.status).toBe(200);
-    expect(accepted.data.friends.filter((f) => !f.assistant).map((f) => f.user.username)).toEqual(['alice2']);
+    expect(accepted.data.friends.filter((f) => !f.bot).map((f) => f.user.username)).toEqual(['alice2']);
+
 
     const mine = await a.request('GET', '/api/friends');
-    expect(mine.data.friends.filter((f) => !f.assistant).map((f) => f.user.username)).toEqual(['bob2']);
+    expect(mine.data.friends.filter((f) => !f.bot).map((f) => f.user.username)).toEqual(['bob2']);
 
-    const friendshipId = mine.data.friends.find((f) => !f.assistant).id;
+    const friendshipId = mine.data.friends.find((f) => !f.bot).id;
+
     const removed = await a.request('DELETE', `/api/friends/${friendshipId}`);
     expect(removed.status).toBe(200);
-    expect(removed.data.friends.filter((f) => !f.assistant)).toHaveLength(0);
+    expect(removed.data.friends.filter((f) => !f.bot)).toHaveLength(0);
+
   });
 
   it('拒绝请求与取消请求', async () => {
@@ -166,7 +169,8 @@ describe('好友 HTTP 流程', () => {
     const requestId = (await b.request('GET', '/api/friends')).data.incoming[0].id;
     const declined = await b.request('POST', `/api/friends/requests/${requestId}/decline`);
     expect(declined.status).toBe(200);
-    expect(declined.data.friends.filter((f) => !f.assistant)).toHaveLength(0);
+    expect(declined.data.friends.filter((f) => !f.bot)).toHaveLength(0);
+
 
     await a.request('POST', '/api/friends/requests', { id: bob3Id });
     const outgoingId = (await a.request('GET', '/api/friends')).data.outgoing[0].id;

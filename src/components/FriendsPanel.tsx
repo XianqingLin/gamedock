@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { friendsApi } from '../lib/api';
-import type { FriendEntry, FriendLists } from '../lib/api';
+import type { FriendEntry, FriendLists, GameInviteEntry } from '../lib/api';
+import { GAMES } from '../data';
 import { useAuth } from '../state/auth';
 import { AuthDialog } from './AuthDialog';
 import type { AuthMode } from './AuthDialog';
@@ -9,6 +10,17 @@ import { Modal } from './Modal';
 import { UserAvatar } from './UserAvatar';
 import { SelfIdentity } from './SelfIdentity';
 
+/** 好友面板打开期间的好友/邀请列表轮询间隔(邀请与新在线状态靠它可见)。 */
+const LISTS_POLL_INTERVAL_MS = 20000;
+
+/** 正在游玩的游戏上下文(仅运行页提供;主站抽屉无此上下文 → 无「邀请游玩」入口)。 */
+export interface CurrentGameContext {
+  slug: string;
+  title: string;
+  /** 游戏经 SDK 上报的可加入参数(未上报为 null,此时邀请只带游戏本身)。 */
+  params: Record<string, unknown> | null;
+}
+
 /**
  * 好友面板(苹果风):顶行左侧为当前用户身份(头像可点开换头像弹窗、名称旁编辑钮改名、
  * 「ID:」+ 用户 ID 悬浮可复制),右侧为关闭钮;
@@ -16,16 +28,28 @@ import { SelfIdentity } from './SelfIdentity';
  * 好友请求钮是切换钮:激活时主列表显示收到的/发出的全部请求,再次点击切回好友列表;
  * 搜索点击后标题与搜索钮让位给搜索框(从中点向左右展开、A 宽度不变、叉在框内右侧),
  * 好友请求与添加好友两钮保持原位;添加好友以下滑面板呈现。
- * 固定 AI 助手「小舟AI」永远在好友列表首位,不可删除,点击打开聊天框;
+ *
+ * 好友行交互(2026-11-23):双击(或键盘 Enter/Space)打开聊天框;右键(键盘 Menu/Shift+F10)
+ * 弹出操作菜单——发送消息 / 邀请游玩(仅正在游玩某游戏时提供,主站抽屉不显示) / 删除好友(二次确认);
+ * 固定测试用户 bot 在列表首位:只有「发送消息」,不可删除、不可被邀请。
+ * 待处理的游戏邀请以固定邀请行展示在主列表顶部:「进入」打开运行页(经邀请深链),「忽略」丢弃。
  * 好友在线状态来自真实心跳(/api/presence),由服务端统一判定(自身身份区显示 ID 而非在线状态)。
  * 面板底部提供退出登录;游客态在面板内提供登录/注册入口。
  * 所有操作失败都以服务端错误文案展示,不假装成功。
  */
-export function FriendsPanel({ onClose }: { onClose: () => void }) {
+export function FriendsPanel({
+  onClose,
+  currentGame,
+}: {
+  onClose: () => void;
+  /** 正在游玩的游戏(仅运行页;主站抽屉不传)。 */
+  currentGame?: CurrentGameContext;
+}) {
   const { status, user, logout } = useAuth();
   const [lists, setLists] = useState<FriendLists | null>(null);
   const [input, setInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [statusNote, setStatusNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [chatPeer, setChatPeer] = useState<{ id: string; name: string } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -33,6 +57,8 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
   const [addOpen, setAddOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<AuthMode | null>(null);
+  const [menu, setMenu] = useState<{ entry: FriendEntry; x: number; y: number } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<FriendEntry | null>(null);
 
   const apply = useCallback(async (action: () => Promise<FriendLists>) => {
     setActionError(null);
@@ -54,8 +80,26 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
     setShowRequests(false);
     setAddOpen(false);
     setQuery('');
+    setMenu(null);
+    setConfirmRemove(null);
     if (status === 'user') void apply(() => friendsApi.list());
   }, [apply, status, user?.id]);
+
+  // 面板打开期间轮询好友列表:收到的邀请、在线状态变化在面板开着时也能浮现。
+  useEffect(() => {
+    if (status !== 'user') return;
+    const timer = window.setInterval(() => {
+      if (!busy) {
+        friendsApi
+          .list()
+          .then(setLists)
+          .catch(() => {
+            // 轮询失败静默,保留现有列表;下个周期重试。
+          });
+      }
+    }, LISTS_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [status, busy]);
 
   if (status !== 'user') {
     return (
@@ -127,6 +171,51 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
     setAddOpen(false);
     setShowRequests(true);
     void apply(() => friendsApi.sendRequest(target));
+  };
+
+  const openChat = (entry: FriendEntry) => {
+    setChatPeer({ id: entry.user.id, name: entry.user.username });
+  };
+
+  const sendInvite = (entry: FriendEntry) => {
+    if (!currentGame) return;
+    setMenu(null);
+    setActionError(null);
+    setBusy(true);
+    friendsApi
+      .sendInvite(entry.user.id, currentGame.slug, currentGame.params)
+      .then(() => {
+        setStatusNote(`已向 ${entry.user.username} 发送游玩邀请`);
+        window.setTimeout(() => setStatusNote(null), 3000);
+      })
+      .catch((err) => {
+        setActionError(err instanceof Error ? err.message : '操作失败,请稍后重试');
+      })
+      .finally(() => setBusy(false));
+  };
+
+  const respondInvite = (invite: GameInviteEntry, accept: boolean) => {
+    setActionError(null);
+    setBusy(true);
+    if (accept) {
+      // 先标记 accepted,再新窗口打开运行页(?invite= 深链,运行页据此把参数经 hello 交给游戏)。
+      friendsApi
+        .respondInvite(invite.id, true)
+        .then(() => {
+          window.open(`/play/${invite.slug}?invite=${encodeURIComponent(invite.id)}`, '_blank', 'noopener,noreferrer');
+          return friendsApi.list();
+        })
+        .then(setLists)
+        .catch((err) => setActionError(err instanceof Error ? err.message : '操作失败,请稍后重试'))
+        .finally(() => setBusy(false));
+    } else {
+      friendsApi
+        .respondInvite(invite.id, false)
+        .then(() => friendsApi.list())
+        .then(setLists)
+        .catch((err) => setActionError(err instanceof Error ? err.message : '操作失败,请稍后重试'))
+        .finally(() => setBusy(false));
+    }
   };
 
   return (
@@ -235,6 +324,11 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
           {actionError}
         </p>
       )}
+      {statusNote && (
+        <p className="friends-status-note" role="status">
+          {statusNote}
+        </p>
+      )}
 
       {!lists && !actionError && <p className="friends-empty">正在加载…</p>}
 
@@ -290,14 +384,53 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <ul className="friends-list">
+              {lists.invites.length > 0 && (
+                <li className="friend-invites-caption" aria-hidden="true">
+                  <span />
+                  邀请
+                  <span />
+                </li>
+              )}
+              {lists.invites.map((invite) => (
+                <li key={invite.id} className="friend-item friend-invite">
+                  <FriendIdentity name={invite.from.username} avatar={invite.from.avatar} large />
+                  <span className="friend-invite-label">
+                    <span>邀请你游玩</span>
+                    <span className="friend-invite-game">{gameTitle(invite.slug)}</span>
+                  </span>
+
+                  <span className="friend-row-actions">
+                    <button
+                      type="button"
+                      className="friend-action-btn friend-action-accept"
+                      aria-label={`接受 ${invite.from.username} 的游玩邀请`}
+                      disabled={busy}
+                      onClick={() => respondInvite(invite, true)}
+                    >
+                      <IconCheck />
+                    </button>
+                    <button
+                      type="button"
+                      className="friend-action-btn friend-action-decline"
+                      aria-label={`忽略 ${invite.from.username} 的游玩邀请`}
+                      disabled={busy}
+                      onClick={() => respondInvite(invite, false)}
+                    >
+                      <IconClose />
+                    </button>
+                  </span>
+                </li>
+              ))}
               {visibleFriends?.map((entry) => (
                 <FriendRow
                   key={entry.id}
                   entry={entry}
                   busy={busy}
-                  onOpenChat={setChatPeer}
-                  onRemove={() => void apply(() => friendsApi.remove(entry.id))}
+                  onOpenChat={openChat}
+                  onMenu={(x, y) => setMenu({ entry, x, y })}
                 />
+
+
               ))}
             </ul>
           )}
@@ -319,6 +452,53 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
+      {menu && (
+        <FriendContextMenu
+          entry={menu.entry}
+          x={menu.x}
+          y={menu.y}
+          hasGameContext={Boolean(currentGame)}
+          busy={busy}
+          onClose={() => setMenu(null)}
+          onChat={() => {
+            openChat(menu.entry);
+            setMenu(null);
+          }}
+          onInvite={() => sendInvite(menu.entry)}
+          onRemove={() => {
+            setConfirmRemove(menu.entry);
+            setMenu(null);
+          }}
+        />
+      )}
+
+      {confirmRemove && (
+        <Modal title="删除好友" overlayClass="confirm-overlay" onClose={() => setConfirmRemove(null)}>
+          <div className="confirm-dialog">
+            <p>
+              确定删除好友「{confirmRemove.user.username}」吗？删除后需要重新添加。
+            </p>
+            <div className="confirm-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setConfirmRemove(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={busy}
+                onClick={() => {
+                  const target = confirmRemove;
+                  setConfirmRemove(null);
+                  void apply(() => friendsApi.remove(target.id));
+                }}
+              >
+                删除好友
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {chatPeer && (
         <Modal title={chatPeer.name} overlayClass="chat-overlay" onClose={() => setChatPeer(null)}>
           <ChatBox peerId={chatPeer.id} peerName={chatPeer.name} />
@@ -328,34 +508,144 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** 邀请行的游戏名:slug → 游戏数据标题(未知 slug 退回显示 slug 本身)。 */
+function gameTitle(slug: string): string {
+  return GAMES.find((game) => game.slug === slug)?.title ?? slug;
+}
+
 interface FriendRowProps {
   entry: FriendEntry;
   busy: boolean;
-  onOpenChat: (peer: { id: string; name: string }) => void;
-  onRemove: () => void;
+  onOpenChat: (entry: FriendEntry) => void;
+  /** 右键/菜单键回调(菜单项集合由面板按游玩上下文决定,含删除入口的二次确认)。 */
+  onMenu: (x: number, y: number) => void;
 }
 
-function FriendRow({ entry, busy, onOpenChat, onRemove }: FriendRowProps) {
-  if (entry.assistant) {
-    return (
-      <li className="friend-item">
-        <button
-          type="button"
-          className="friend-item-btn"
-          onClick={() => onOpenChat({ id: entry.user.id, name: entry.user.username })}
-        >
-          <FriendIdentity name={entry.user.username} avatar={entry.user.avatar} online={entry.user.online} large />
-        </button>
-      </li>
-    );
-  }
+
+/**
+ * 好友行:双击/Enter/Space 打开聊天框;右键或键盘菜单键弹出操作菜单。
+ * bot 行只有聊天入口(菜单仅「发送消息」);普通好友菜单含删除(带二次确认)。
+ * 菜单项集合由面板按游玩上下文决定(hasGameContext 只影响菜单,不影响行本身)。
+ */
+function FriendRow({ entry, busy, onOpenChat, onMenu }: FriendRowProps) {
+
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onOpenChat(entry);
+      return;
+    }
+    if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+      event.preventDefault();
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      onMenu(rect.left, rect.bottom);
+    }
+  };
+
   return (
     <li className="friend-item">
-      <FriendIdentity name={entry.user.username} avatar={entry.user.avatar} online={entry.user.online} large />
-      <button type="button" className="btn-link" disabled={busy} onClick={onRemove}>
-        删除
+      <button
+        type="button"
+        className="friend-item-btn"
+        disabled={busy}
+        onDoubleClick={() => onOpenChat(entry)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onMenu(event.clientX, event.clientY);
+        }}
+        onKeyDown={handleKeyDown}
+        aria-haspopup="menu"
+        aria-label={`好友 ${entry.user.username},双击打开聊天,右键打开操作菜单`}
+        title={`${entry.user.username}(双击发消息 / 右键操作)`}
+      >
+        <FriendIdentity name={entry.user.username} avatar={entry.user.avatar} online={entry.user.online} large />
       </button>
+      {entry.bot && <span className="friend-row-tag">测试</span>}
     </li>
+  );
+}
+
+/** 好友右键操作菜单:固定定位在指针/键盘位置,点外部、Escape 或滚动即关闭。 */
+function FriendContextMenu({
+  entry,
+  x,
+  y,
+  hasGameContext,
+  busy,
+  onClose,
+  onChat,
+  onInvite,
+  onRemove,
+}: {
+  entry: FriendEntry;
+  x: number;
+  y: number;
+  hasGameContext: boolean;
+  busy: boolean;
+  onClose: () => void;
+  onChat: () => void;
+  onInvite: () => void;
+  onRemove: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const firstItemRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    firstItemRef.current?.focus();
+    const onPointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose();
+    };
+    // Escape 只关菜单不关抽屉:window 捕获先于 Modal 的 document 捕获,拦截后不再下传。
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    const onScrollOrResize = () => onClose();
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [onClose]);
+
+
+  // 视口内夹取:菜单 160px 宽、每项约 40px,右/下方向各留 8px 余量。
+  const left = Math.max(8, Math.min(x, window.innerWidth - 176));
+  const top = Math.max(8, Math.min(y, window.innerHeight - 144));
+  const items: { key: string; label: string; onClick: () => void }[] = [
+    { key: 'chat', label: '发送消息', onClick: onChat },
+  ];
+  if (hasGameContext && !entry.bot) {
+    items.push({ key: 'invite', label: '邀请游玩', onClick: onInvite });
+  }
+  if (!entry.bot) {
+    items.push({ key: 'remove', label: '删除好友', onClick: onRemove });
+  }
+
+  return (
+    <div className="friend-menu" style={{ left, top }} role="menu" aria-label={`${entry.user.username} 的操作`} ref={menuRef}>
+      {items.map((item, index) => (
+        <button
+          key={item.key}
+          ref={index === 0 ? firstItemRef : undefined}
+          type="button"
+          role="menuitem"
+          className={`friend-menu-item${item.key === 'remove' ? ' friend-menu-danger' : ''}`}
+          disabled={busy}
+          onClick={item.onClick}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -376,10 +666,12 @@ function FriendIdentity({
       <UserAvatar user={{ username: name, avatar }} className={large ? 'friend-avatar-lg' : 'friend-avatar'} />
       <span className="friend-meta">
         <span className="friend-name">{name}</span>
-        <span className="friend-status">
-          <span className={online ? 'status-dot status-online' : 'status-dot status-offline'} aria-hidden="true" />
-          {online ? '在线' : '离线'}
-        </span>
+        {online === undefined ? null : (
+          <span className="friend-status">
+            <span className={online ? 'status-dot status-online' : 'status-dot status-offline'} aria-hidden="true" />
+            {online ? '在线' : '离线'}
+          </span>
+        )}
       </span>
     </span>
   );

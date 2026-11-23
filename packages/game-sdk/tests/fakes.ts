@@ -42,8 +42,14 @@ export class FakeFetch {
 }
 
 export function helloMessage(user: PlatformHelloMessage['user'] = null): PlatformHelloMessage {
-  return { v: 1, t: 'platform:hello', platform: 'gamedock', slug: 'tether-together', user };
+  return { v: 1, t: 'platform:hello', platform: 'gamedock', slug: 'tether-together', user, join: null };
 }
+
+/** 带 join 参数的 hello(邀请深链场景)。 */
+export function helloWithJoin(join: Record<string, unknown>): PlatformHelloMessage {
+  return { ...helloMessage({ id: 'u1', username: '小林' }), join };
+}
+
 
 export function makeEnv(
   hello: PlatformHelloMessage,

@@ -1,117 +1,82 @@
 /**
- * 平台聊天(当前仅 AI 助手「小舟AI」,好友间聊天不在范围)。
- * 消息记录:{ id, userId, peerId, role:'user'|'assistant', content, createdAt }
+ * 平台聊天(2026-11-23 起:好友间聊天,取代原「小舟AI」AI 助手聊天)。
+ * 消息存储形状:{ id, fromId, toId, content, createdAt }(双向各存一条,对等);
+ * 对外投影为 { id, peer, mine, content, createdAt }(peer = 对方用户 ID,mine = 是否本端发出)。
  *
- * AI 回复走与厂商无关的通用 API:OpenAI 兼容的 POST {baseUrl}/chat/completions,
- * 配置来自 env.ai = { baseUrl, apiKey, model }(worker.mjs 组装;密钥经 secret 注入)。
- * 未配置或调用失败时明确报错,不伪造回复。
+ * 内置「测试用户」bot(见 bot.mjs)给TA发消息后由服务端落一条固定自动回复,
+ * 让好友聊天链路在单账号下可自测收发闭环;除 bot 外无任何自动应答。
  */
+import { TEST_USER } from './bot.mjs';
 
-export const AI_ASSISTANT = { id: 'ai-xiaozhou', username: '小舟AI', avatar: 'av0' };
+export { TEST_USER };
 
 const CONTENT_MAX = 2000;
 /** 返回给前端的历史条数上限。 */
 const HISTORY_LIMIT = 100;
-/** 送入 AI 请求的最近消息条数。 */
-const AI_CONTEXT_LIMIT = 20;
-
-const SYSTEM_PROMPT =
-  '你是 GameDock 平台的 AI 助手「小舟AI」。GameDock 是一个网页游戏平台,提供游戏库浏览、' +
-  '账号(用户名密码注册登录)、好友社交(通过用户 ID 搜索添加好友)和平台存档。' +
-  '用简体中文简短、友好地回答,帮助用户使用平台功能;不确定的信息不要编造,可以引导用户自行查看页面。';
 
 const fail = (error) => ({ ok: false, error });
 
-/** AI 环节失败的错误码:调用方据此返回 5xx(用户消息已落库),与入参校验错误(400)区分。 */
-const failAi = (code, error) => ({ ok: false, code, error });
+/** peer 必须是已接受的好友(测试用户 friendship 由 ensureTestUserFriend 保证);不能对自己发消息。 */
+async function peerGuard(store, userId, peerId) {
+  if (typeof peerId !== 'string' || !peerId) return fail('会话不存在');
+  if (peerId === userId) return fail('只能与好友聊天');
+  const friendship = await store.getFriendshipBetween(userId, peerId);
+  if (!friendship || friendship.status !== 'accepted') return fail('只能与好友聊天');
+  return null;
+}
 
-function peerGuard(peerId) {
-  if (peerId === AI_ASSISTANT.id) return null;
-  return fail('会话不存在');
+function project(message, userId) {
+  const peerId = message.fromId === userId ? message.toId : message.fromId;
+  return {
+    id: message.id,
+    peer: peerId,
+    mine: message.fromId === userId,
+    content: message.content,
+    createdAt: message.createdAt,
+  };
 }
 
 /** 聊天历史(按时间正序,最多 HISTORY_LIMIT 条)。 */
 export async function listChatMessages(store, userId, peerId) {
-  const invalid = peerGuard(peerId);
+  const invalid = await peerGuard(store, userId, peerId);
   if (invalid) return invalid;
-  return { ok: true, messages: await store.listChatMessages(userId, peerId, HISTORY_LIMIT) };
+  const rows = await store.listChatMessagesBetween(userId, peerId, HISTORY_LIMIT);
+  return { ok: true, messages: rows.map((row) => project(row, userId)) };
 }
 
 /**
- * 发送消息:先落库用户消息,再请求 AI 回复并落库;
- * 回复失败时用户消息保留(历史里可见),由调用方把错误文案展示给用户。
+ * 发送消息:落库本端消息;对方是测试用户时追加一条 bot 自动回复。
+ * 普通好友不自动应答,对方通过聊天历史轮询收到(前端打开聊天框时轮询)。
  */
-export async function sendChatMessage(store, userId, peerId, content, ai) {
-  const invalid = peerGuard(peerId);
+export async function sendChatMessage(store, userId, peerId, content) {
+  const invalid = await peerGuard(store, userId, peerId);
   if (invalid) return invalid;
   if (typeof content !== 'string' || !content.trim()) return fail('消息不能为空');
   const text = content.trim();
   if (text.length > CONTENT_MAX) return fail(`消息过长,最多 ${CONTENT_MAX} 字`);
 
-  const userMessage = {
+  const mine = {
     id: crypto.randomUUID(),
-    userId,
-    peerId,
-    role: 'user',
+    fromId: userId,
+    toId: peerId,
     content: text,
     createdAt: new Date().toISOString(),
   };
-  await store.insertChatMessage(userMessage);
+  await store.insertChatMessage(mine);
+  const out = [project(mine, userId)];
 
-  const recent = await store.listChatMessages(userId, peerId, AI_CONTEXT_LIMIT + 1);
-  const prior = recent.filter((m) => m.id !== userMessage.id).slice(-AI_CONTEXT_LIMIT);
-  const reply = await requestAiReply(ai, [
-    ...prior.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: text },
-  ]);
-  if (!reply.ok) return reply;
-
-  const assistantMessage = {
-    id: crypto.randomUUID(),
-    userId,
-    peerId,
-    role: 'assistant',
-    content: reply.content,
-    createdAt: new Date().toISOString(),
-  };
-  await store.insertChatMessage(assistantMessage);
-  return { ok: true, messages: [userMessage, assistantMessage] };
-}
-
-/** 调用通用 AI API(OpenAI 兼容),返回 {ok, content} 或 {ok:false, code, error}。 */
-async function requestAiReply(ai, messages) {
-  if (!ai?.baseUrl || !ai?.apiKey || !ai?.model) {
-    return failAi('ai_unconfigured', 'AI 服务未配置,暂时无法回复');
+  if (peerId === TEST_USER.id) {
+    // bot 固定回声式回复:内容回显截断,让单账号即可验证收发闭环。
+    const quoted = text.length > 50 ? `${text.slice(0, 50)}…` : text;
+    const reply = {
+      id: crypto.randomUUID(),
+      fromId: TEST_USER.id,
+      toId: userId,
+      content: `(测试用户自动回复)已收到:「${quoted}」`,
+      createdAt: new Date().toISOString(),
+    };
+    await store.insertChatMessage(reply);
+    out.push(project(reply, userId));
   }
-
-  let response;
-  try {
-    response = await fetch(`${ai.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${ai.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: ai.model,
-        messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
-      }),
-    });
-  } catch {
-    return failAi('ai_unavailable', 'AI 服务暂时不可用,请稍后重试');
-  }
-
-  if (!response.ok) return failAi('ai_unavailable', 'AI 服务暂时不可用,请稍后重试');
-
-  let data;
-  try {
-    data = await response.json();
-  } catch {
-    return failAi('ai_broken', 'AI 服务响应异常,请稍后重试');
-  }
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) {
-    return failAi('ai_broken', 'AI 服务响应异常,请稍后重试');
-  }
-  return { ok: true, content: content.trim() };
+  return { ok: true, messages: out };
 }

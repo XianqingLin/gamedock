@@ -9,12 +9,16 @@
 - 存储(2026-11-23):D1(用户/好友/聊天消息)、KV(玩家存档)、R2(游戏静态资源,bucket `gamedock-games`)。
 - 本地开发:`wrangler dev`(本地模拟 D1/KV/R2)+ vite 代理;测试向业务模块注入内存/fs 实现。
 
-AI 助手聊天(2026-11-23,仅 AI 助手,好友间聊天不在范围):
+好友间聊天与内置测试用户(2026-11-23,取代原「小舟AI」AI 助手聊天;外部 AI 依赖整体移除,`AI_API_*` vars/secret 不再使用,存量库执行 `server/migration-chat-invites.sql` 重建聊天表):
 
-- AI 回复走与厂商无关的通用 API:OpenAI 兼容的 `POST {AI_API_BASE_URL}/chat/completions`(Bearer 认证);Base URL 与模型名用 vars(`AI_API_BASE_URL`/`AI_API_MODEL`),密钥用 secret(`AI_API_KEY`,不入库)。未配置或调用失败时向用户明确报错,不伪造回复。
-- 聊天消息存 D1 `chat_messages`(按用户隔离,peer 当前固定为 `ai-xiaozhou`);历史返回最多 100 条,送 AI 最近 20 条 + 系统提示词;单条消息 ≤2000 字。
+- 聊天是好友间双向会话:D1 `chat_messages` 改 `{id, from_id, to_id, content, created_at}`(双向各存一条,对等);历史返回最多 100 条,前端打开聊天框期间每 4 秒轮询收新消息(无推送)。单条消息 ≤2000 字。
+- peer 校验:只能与已接受好友聊天(非好友 404「只能与好友聊天」;对自己发消息同样拒绝)。测试用户 bot 是真实 users 行(passSalt/passHash 占位,无法登录),注册与打开好友列表时幂等补建其好友关系;给 TA 发消息服务端追加一条固定回声式自动回复(引用原文截断 50 字),无外部 AI 调用。
+- bot 用户名「测试用户」为保留名(注册撞名报「用户名已存在」);bot 不可删除(removeFriend 明确报错)、不可被邀请。
+- 好友邀请(仅信息传递):D1 `game_invites` `{id, from_user, to_user, slug, params, status, created_at, responded_at}`;`POST /api/invites`(对方须为好友、slug 须已接入、params 为可选对象且值限 string/number/boolean、JSON ≤1KB,平台不解析)、`GET /api/invites`(接收方 pending 列表,并入 `GET /api/friends` 响应的 `invites` 字段)、`GET /api/invites/:id`(接收方取单条,任意状态——运行页刷新后可重取参数)、`POST /api/invites/:id/accept|decline`。
+- 邀请深链(platform-seam §4):运行页消费 `?invite=<id>`,把邀请 params 经握手 `join` 字段下发给游戏;游戏经 `game:invite-context` 上报当前可加入参数(形状同 params 校验,非法按 null 处理),GameFrame 暂存最新值供好友面板「邀请游玩」携带。SDK(`packages/game-sdk`) hello 增加 `join?: Record<string, unknown> | null`,`GameDockSdk.join` 原样暴露;SDK 改动后必须重新 `npm run build`(dist 被 bvn 以 file: 依赖硬链接引用)。
 - 在线状态(2026-11-23):来源为登录态浏览器的心跳——App 内 `PresenceHeartbeat` 登录后立即并每 60 秒(页面可见时)POST `/api/presence`,服务端写 `users.last_seen_at`;好友列表按 5 分钟窗口判定在线,无心跳一律离线,不编造。存量库执行 `server/migration-presence.sql`(加 `last_seen_at` 列),新建库直接用最新 `schema.sql`。
 - 平台不做联机的边界不变:聊天是平台社交功能,不是游戏内联机通道。
+
 
 不为简单功能提前搭无关后端,不引入只解决假想需求的大型依赖,不加无实际作用的抽象层。
 
@@ -44,7 +48,8 @@ AI 助手聊天(2026-11-23,仅 AI 助手,好友间聊天不在范围):
 
 - 注册/登录/登出/me 按真实方案实现;密码 PBKDF2-SHA256 加盐哈希,不存不传明文;凭据不写入本地存储、日志或游戏数据。
 - 用户 ID 为 7-8 位随机数字(1,000,000~99,999,999,注册时分配、此后不变;2026-11-23 起取代原 UUID):好友栏身份区展示与复制、加好友按 ID 搜索均用该编号;生成时查重,D1 主键唯一约束兜底、撞号换号重试,游戏侧(platform-seam 契约)不应假设其格式。
-- 用户资料(2026-11-23):`PATCH /api/auth/profile` 更新用户名与头像。改名直接改登录用户名(复用注册校验与 username_lower 唯一约束,撞号返回「用户名已存在」);会话只签 uid,改名不重发 Cookie。头像存系统预设编号(users.avatar,migration-avatar.sql 供存量库加列;av0 = 小舟AI 专属,av1~av16 用户可选;null = 默认首字母头像),编号约束 server/auth.mjs `AVATAR_ID_PATTERN` 与前端清单 src/data/avatars.tsx 同步维护;publicUser 投影 avatar,好友列表 me/用户项一并携带。
+- 用户资料(2026-11-23):`PATCH /api/auth/profile` 更新用户名与头像。改名直接改登录用户名(复用注册校验与 username_lower 唯一约束,撞号返回「用户名已存在」);会话只签 uid,改名不重发 Cookie。头像存系统预设编号(users.avatar,migration-avatar.sql 供存量库加列;av0 = 测试用户 bot 专属,av1~av16 用户可选;null = 默认首字母头像),编号约束 server/auth.mjs `AVATAR_ID_PATTERN` 与前端清单 src/data/avatars.tsx 同步维护;publicUser 投影 avatar,好友列表 me/用户项一并携带。
+
 - 会话为无状态签名 Cookie(HMAC-SHA256,httpOnly + SameSite=Lax,host-only);密钥经 secret 注入不入库;过期或签名非法按未登录处理。
 - 至少区分加载中/未登录/已登录/错误状态,身份未确认不默认按已登录处理。
 - 存储接口双实现:内存/fs 供测试,D1/KV 供线上,业务代码只面向接口。
@@ -77,7 +82,8 @@ AI 助手聊天(2026-11-23,仅 AI 助手,好友间聊天不在范围):
 测试至少覆盖:
 
 - 搜索与分类组合筛选、专题筛选、排序方式、空结果与清除筛选、按 slug 查找、启动四态、外链协议校验与危险协议拦截、筛选排除选中项的清理、缺省封面回退。
-- 注册/登录/登出/me 全流程(含错误密码、重复注册、会话伪造拒绝);好友全流程及无效操作(含 AI 助手固定、按 ID 搜索、同意流);聊天历史/发送/未登录拒绝/peer 校验/AI 未配置与调用失败;在线心跳(未登录拒绝、心跳后好友显示在线);存档写读列删、slug 校验、大小上限、未登录拒绝;资料更新(2026-11-23:改名校验/查重、头像预设编号校验与清除、未登录拒绝)与跨游戏存档聚合(空列表、按游戏分组)。
+- 注册/登录/登出/me 全流程(含错误密码、重复注册、会话伪造拒绝、bot 保留用户名撞名);好友全流程及无效操作(含测试用户固定/不可删除、按 ID 搜索、同意流);好友聊天历史/发送/未登录拒绝/peer 校验(非好友与本人拒绝)/bot 自动回复;邀请全流程(发送校验:非好友/自己/bot/未接入 slug/非法 params,接受/忽略幂等,深链取单条);在线心跳(未登录拒绝、心跳后好友显示在线);存档写读列删、slug 校验、大小上限、未登录拒绝;资料更新(2026-11-23:改名校验/查重、头像预设编号校验与清除、未登录拒绝)与跨游戏存档聚合(空列表、按游戏分组)。
+
 - CORS:内容域放行(含 preflight)、自身源放行、第三方源拒绝。
 - R2 静态资源服务:目录回退、Content-Type 推断、缓存策略、Range、路径穿越、未命中 404。
 - Worker 路由分流:游戏域、主域重定向、本地 dev 直读、SPA 回退。

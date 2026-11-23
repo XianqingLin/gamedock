@@ -13,17 +13,22 @@
  * - updateFriendship(id, patch)   // { status?, respondedAt? }
  * - deleteFriendship(id)
  * - insertChatMessage(record)
- * - listChatMessages(userId, peerId, limit) → [record](时间正序,最近 limit 条)
+ * - listChatMessagesBetween(userA, userB, limit) → [record](时间正序,最近 limit 条)
+ * - insertInvite(record)
+ * - getInvite(id) → record | null
+ * - listPendingInvitesFor(toUserId) → [record](时间正序)
+ * - updateInvite(id, patch)      // { status?, respondedAt? }
  * - updateLastSeen(userId, isoTime)
  *
  * user 形状:{ id, username, passSalt, passHash, createdAt, lastSeenAt?, avatar? }
  * friendship 形状:{ id, users:[aId,bId](升序), status:'pending'|'accepted', requestedBy, createdAt, respondedAt? }
- * chatMessage 形状:{ id, userId, peerId, role:'user'|'assistant', content, createdAt }
+ * chatMessage 形状:{ id, fromId, toId, content, createdAt }(好友间双向,各存一条)
+ * invite 形状:{ id, fromUser, toUser, slug, params(object|null), status:'pending'|'accepted'|'declined', createdAt, respondedAt? }
  *
  * 本文件提供内存实现:测试与纯内存场景用;线上见 store-d1.mjs(D1)。
  */
 export function createMemoryStore() {
-  const db = { users: [], friendships: [], chatMessages: [] };
+  const db = { users: [], friendships: [], chatMessages: [], invites: [] };
 
   return {
     /** 测试用:直接查看底层数据。 */
@@ -80,9 +85,28 @@ export function createMemoryStore() {
       db.chatMessages.push(record);
     },
 
-    async listChatMessages(userId, peerId, limit) {
-      const rows = db.chatMessages.filter((m) => m.userId === userId && m.peerId === peerId);
+    async listChatMessagesBetween(userA, userB, limit) {
+      const rows = db.chatMessages.filter(
+        (m) => (m.fromId === userA && m.toId === userB) || (m.fromId === userB && m.toId === userA),
+      );
       return rows.slice(-limit);
+    },
+
+    async insertInvite(record) {
+      db.invites.push(record);
+    },
+
+    async getInvite(id) {
+      return db.invites.find((r) => r.id === id) ?? null;
+    },
+
+    async listPendingInvitesFor(toUserId) {
+      return db.invites.filter((r) => r.toUser === toUserId && r.status === 'pending');
+    },
+
+    async updateInvite(id, patch) {
+      const record = db.invites.find((r) => r.id === id);
+      if (record) Object.assign(record, patch);
     },
 
     async updateLastSeen(userId, isoTime) {

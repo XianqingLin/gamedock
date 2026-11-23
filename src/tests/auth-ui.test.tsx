@@ -2,224 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
+import { makeFakeApi } from './fake-backend';
+import type { FakeApi } from './fake-backend';
 
-/**
- * 内存版假后端:完整模拟注册/登录/登出/好友/聊天接口的响应语义(含错误文案),
- * 用于驱动真实 UI 组件的集成测试。
- */
-function makeFakeApi() {
-  const users = new Map<
-    string,
-    { id: string; username: string; createdAt: string; password: string; avatar: string | null }
-  >();
-  const friendships: { id: string; a: string; b: string; status: 'pending' | 'accepted'; requestedBy: string }[] = [];
-  const saves: { slug: string; key: string; updatedAt: string; size: number }[] = [];
-  const chatHistory: {
-    id: string;
-    userId: string;
-    peer: string;
-    role: 'user' | 'assistant';
-    content: string;
-    createdAt: string;
-  }[] = [];
-  let currentUserId: string | null = null;
-  let seq = 0;
-
-  const usernameOf = (id: string) => [...users.values()].find((u) => u.id === id)?.username ?? '(已注销)';
-  const publicUser = (id: string) => {
-    const u = [...users.values()].find((entry) => entry.id === id)!;
-    return { id: u.id, username: u.username, createdAt: u.createdAt, avatar: u.avatar };
-  };
-  const lists = () => {
-    const friends: unknown[] = [
-      { id: 'ai-xiaozhou', user: { id: 'ai-xiaozhou', username: '小舟AI' }, since: '', assistant: true },
-    ];
-    const incoming: unknown[] = [];
-    const outgoing: unknown[] = [];
-    for (const r of friendships) {
-      if (r.a !== currentUserId && r.b !== currentUserId) continue;
-      if (r.status === 'accepted') {
-        const other = r.a === currentUserId ? r.b : r.a;
-        friends.push({ id: r.id, user: { id: other, username: usernameOf(other) }, since: r.id });
-      } else if (r.requestedBy === currentUserId) {
-        const other = r.a === currentUserId ? r.b : r.a;
-        outgoing.push({ id: r.id, to: { id: other, username: usernameOf(other) }, createdAt: r.id });
-      } else {
-        incoming.push({ id: r.id, from: { id: r.requestedBy, username: usernameOf(r.requestedBy) }, createdAt: r.id });
-      }
-    }
-    const me = currentUserId
-      ? { id: currentUserId, username: usernameOf(currentUserId), online: true }
-      : null;
-    return { me, friends, incoming, outgoing };
-  };
-
-  const json = (data: unknown, status = 200) =>
-    new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
-
-  return {
-    users,
-    /** 直接在假后端里塞一个用户(不改变当前登录会话)。 */
-    addUser(username: string) {
-      users.set(username.toLowerCase(), {
-        id: `u${++seq}`,
-        username,
-        createdAt: '2026-11-16T00:00:00Z',
-        password: 'irrelevant',
-        avatar: null,
-      });
-    },
-    /** 注入一条存档槽位(存档页测试用)。 */
-    seedSave(slug: string, key: string, updatedAt = '2026-11-23T00:00:00Z', size = 128) {
-      saves.push({ slug, key, updatedAt, size });
-    },
-    /** 注入一条 from → to 的待处理好友请求。 */
-    seedIncomingRequest(fromUsername: string, toUsername: string) {
-      const from = users.get(fromUsername.toLowerCase())!;
-      const to = users.get(toUsername.toLowerCase())!;
-      friendships.push({ id: `r${++seq}`, a: from.id, b: to.id, status: 'pending', requestedBy: from.id });
-    },
-    fetch: vi.fn(async (url: string, options: RequestInit = {}) => {
-      const path = new URL(url, 'http://localhost').pathname;
-      const method = options.method ?? 'GET';
-      const body = options.body ? (JSON.parse(String(options.body)) as Record<string, unknown>) : {};
-
-      if (path === '/api/auth/me') {
-        return json({ user: currentUserId ? publicUser(currentUserId) : null });
-      }
-      if (path === '/api/auth/register' && method === 'POST') {
-        const username = String(body.username ?? '');
-        const password = String(body.password ?? '');
-        if (!/^[a-zA-Z0-9_一-龥]{2,24}$/u.test(username)) {
-          return json({ error: '用户名需为 2-24 位字母、数字、下划线或中文' }, 400);
-        }
-        if (password.length < 6) return json({ error: '密码需为 6-128 位' }, 400);
-        if (users.has(username.toLowerCase())) return json({ error: '用户名已存在' }, 400);
-        users.set(username.toLowerCase(), { id: `u${++seq}`, username, createdAt: '2026-11-16T00:00:00Z', password, avatar: null });
-        currentUserId = users.get(username.toLowerCase())!.id;
-        return json({ user: publicUser(currentUserId) });
-      }
-      if (path === '/api/auth/login' && method === 'POST') {
-        const found = users.get(String(body.username ?? '').toLowerCase());
-        if (!found || found.password !== body.password) return json({ error: '用户名或密码错误' }, 401);
-        currentUserId = found.id;
-        return json({ user: publicUser(found.id) });
-      }
-      if (path === '/api/auth/logout' && method === 'POST') {
-        currentUserId = null;
-        return json({ ok: true });
-      }
-      if (path === '/api/auth/profile' && method === 'PATCH') {
-        if (!currentUserId) return json({ error: '需要登录' }, 401);
-        const me = [...users.values()].find((u) => u.id === currentUserId)!;
-        if (body.username !== undefined) {
-          const username = String(body.username);
-          if (!/^[a-zA-Z0-9_一-龥]{2,24}$/u.test(username)) {
-            return json({ error: '用户名需为 2-24 位字母、数字、下划线或中文' }, 400);
-          }
-          const owner = users.get(username.toLowerCase());
-          if (owner && owner.id !== me.id) return json({ error: '用户名已存在' }, 400);
-          me.username = username;
-        }
-        if (body.avatar !== undefined) {
-          if (body.avatar !== null && !/^av(?:0|[1-9]|1[0-6])$/.test(String(body.avatar))) {
-            return json({ error: '未知头像' }, 400);
-          }
-          me.avatar = body.avatar as string | null;
-        }
-        return json({ user: publicUser(me.id) });
-      }
-      if (path === '/api/saves' && method === 'GET') {
-        if (!currentUserId) return json({ error: '需要登录' }, 401);
-        const bySlug = new Map<string, { key: string; updatedAt: string; size: number }[]>();
-        for (const slot of saves) {
-          const slots = bySlug.get(slot.slug) ?? [];
-          slots.push({ key: slot.key, updatedAt: slot.updatedAt, size: slot.size });
-          bySlug.set(slot.slug, slots);
-        }
-        return json({ games: [...bySlug.entries()].map(([slug, slots]) => ({ slug, slots })) });
-      }
-      const saveRemove = /\/api\/saves\/([\w-]+)\/([\w-]+)$/.exec(path);
-      if (saveRemove && method === 'DELETE') {
-        if (!currentUserId) return json({ error: '需要登录' }, 401);
-        const index = saves.findIndex((s) => s.slug === saveRemove[1] && s.key === saveRemove[2]);
-        if (index !== -1) saves.splice(index, 1);
-        return json({ ok: true });
-      }
-      if (path === '/api/friends' && method === 'GET') return json(lists());
-      if (path === '/api/presence' && method === 'POST') return json({ ok: true });
-      if (path === '/api/friends/requests' && method === 'POST') {
-        const target = [...users.values()].find((u) => u.id === body.id);
-        if (!target) return json({ error: '找不到该用户' }, 400);
-        if (target.id === currentUserId) return json({ error: '不能添加自己为好友' }, 400);
-        friendships.push({
-          id: `r${++seq}`,
-          a: currentUserId!,
-          b: target.id,
-          status: 'pending',
-          requestedBy: currentUserId!,
-        });
-        return json(lists());
-      }
-      if (/^\/api\/chat\/[\w-]+$/.test(path)) {
-        if (!currentUserId) return json({ error: '需要登录' }, 401);
-        if (path !== '/api/chat/ai-xiaozhou') return json({ error: '会话不存在' }, 404);
-        const mine = chatHistory.filter((m) => m.userId === currentUserId);
-        if (method === 'GET') return json({ messages: mine });
-        if (method === 'POST') {
-          const content = String(body.content ?? '').trim();
-          if (!content) return json({ error: '消息不能为空' }, 400);
-          const userMessage = {
-            id: `m${++seq}`,
-            userId: currentUserId,
-            peer: 'ai-xiaozhou',
-            role: 'user' as const,
-            content,
-            createdAt: '2026-11-23T00:00:00Z',
-          };
-          const assistantMessage = {
-            id: `m${++seq}`,
-            userId: currentUserId,
-            peer: 'ai-xiaozhou',
-            role: 'assistant' as const,
-            content: `好的,收到:「${content}」`,
-            createdAt: '2026-11-23T00:00:00Z',
-          };
-          chatHistory.push(userMessage, assistantMessage);
-          return json({ messages: [userMessage, assistantMessage] });
-        }
-      }
-      const respond = /\/api\/friends\/requests\/([\w-]+)\/(accept|decline)$/.exec(path);
-      if (respond && method === 'POST') {
-        const record = friendships.find((r) => r.id === respond[1]);
-        if (!record) return json({ error: '请求不存在或已处理' }, 400);
-        if (respond[2] === 'accept') record.status = 'accepted';
-        else friendships.splice(friendships.indexOf(record), 1);
-        return json(lists());
-      }
-      const cancel = /\/api\/friends\/requests\/([\w-]+)$/.exec(path);
-      if (cancel && method === 'DELETE') {
-        const record = friendships.find((r) => r.id === cancel[1]);
-        if (record) friendships.splice(friendships.indexOf(record), 1);
-        return json(lists());
-      }
-      const remove = /\/api\/friends\/([\w-]+)$/.exec(path);
-      if (remove && method === 'DELETE') {
-        const record = friendships.find((r) => r.id === remove[1]);
-        if (record) friendships.splice(friendships.indexOf(record), 1);
-        return json(lists());
-      }
-      return json({ error: '接口不存在' }, 404);
-    }),
-  };
-}
-
-let fake: ReturnType<typeof makeFakeApi>;
+let fake: FakeApi;
 
 beforeEach(() => {
   fake = makeFakeApi();
   vi.stubGlobal('fetch', fake.fetch);
 });
+
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -305,12 +97,13 @@ describe('游客身份', () => {
     fake.addUser('bob');
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
     const panel = screen.getByRole('dialog', { name: '好友' });
     // 自身区不再显示在线状态,改为「ID:」+ 用户 ID,悬浮出复制钮
-    expect(within(panel).getByText('ID:')).toBeInTheDocument();
-    expect(within(panel).queryByText(/在线/)).not.toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: '复制用户 ID' })).toBeInTheDocument();
+    const self = within(panel).getByText('ID:').closest('.friends-self-identity') as HTMLElement;
+    expect(within(self).getByRole('button', { name: '复制用户 ID' })).toBeInTheDocument();
+    expect(within(self).queryByText(/在线/)).not.toBeInTheDocument();
+
 
     fireEvent.click(within(panel).getByRole('button', { name: '编辑用户名' }));
     const input = within(panel).getByRole('textbox', { name: '用户名' });
@@ -328,7 +121,7 @@ describe('游客身份', () => {
   it('好友栏点击自身头像弹窗:点击预设立即保存,重开仍选中', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
     const panel = screen.getByRole('dialog', { name: '好友' });
 
     fireEvent.click(within(panel).getByRole('button', { name: '更换头像' }));
@@ -350,7 +143,7 @@ describe('游客身份', () => {
     fake.seedSave('tether-together', 'checkpoint');
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
     closePanel();
     fireEvent.click(screen.getByRole('link', { name: '存档' }));
 
@@ -369,7 +162,7 @@ describe('游客身份', () => {
   it('存档页空状态', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
     closePanel();
     fireEvent.click(screen.getByRole('link', { name: '存档' }));
     expect(await screen.findByText('暂无存档')).toBeInTheDocument();
@@ -392,10 +185,10 @@ describe('好友面板', () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
     // 注册后好友栏保持打开
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
 
     // 等待面板初始加载完成,避免提交按钮仍处于 busy 禁用状态
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
     fireEvent.click(screen.getByRole('button', { name: '添加好友' }));
     fireEvent.change(await screen.findByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
       target: { value: bobId },
@@ -408,14 +201,15 @@ describe('好友面板', () => {
     expect(screen.getByRole('button', { name: '添加好友' })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('好友列表固定包含不可删除的 AI 助手,发送请求失败显示服务端错误', async () => {
+  it('好友列表固定包含不可删除的测试用户,发送请求失败显示服务端错误', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
 
-    await screen.findByRole('button', { name: /小舟AI/ });
-    // AI 助手不可删除:列表里唯一的「删除」按钮数量等于人类好友数量(0)。
+    await screen.findByRole('button', { name: /测试用户/ });
+    // 测试用户 bot 不可删除:列表里唯一的「删除」按钮数量等于人类好友数量(0,内联删除钮已移除)。
     expect(screen.queryByRole('button', { name: '删除' })).not.toBeInTheDocument();
+
 
     fireEvent.click(screen.getByRole('button', { name: '添加好友' }));
     fireEvent.change(await screen.findByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
@@ -428,9 +222,9 @@ describe('好友面板', () => {
   it('搜索时工具区整行换成搜索框,退出搜索后恢复', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
     const panel = await screen.findByRole('dialog', { name: '好友' });
-    await within(panel).findByRole('button', { name: /小舟AI/ });
+    await within(panel).findByRole('button', { name: /测试用户/ });
 
     fireEvent.click(within(panel).getByRole('button', { name: '搜索好友' }));
     expect(within(panel).queryByText('好友')).not.toBeInTheDocument();
@@ -444,22 +238,26 @@ describe('好友面板', () => {
     expect(within(panel).getByRole('button', { name: '搜索好友' })).toBeInTheDocument();
   });
 
-  it('点击 AI 助手弹出聊天框,发送消息并收到回复', async () => {
+  it('双击测试用户打开聊天框,发送消息并收到自动回复', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
 
-    fireEvent.click(await screen.findByRole('button', { name: /小舟AI/ }));
-    const chatDialog = await screen.findByRole('dialog', { name: '小舟AI' });
+    // 双击(而非单击)打开聊天框;单击不触发
+    fireEvent.click(await screen.findByRole('button', { name: /测试用户/ }));
+    expect(screen.queryByRole('dialog', { name: '测试用户' })).not.toBeInTheDocument();
+    fireEvent.doubleClick(screen.getByRole('button', { name: /测试用户/ }));
+    const chatDialog = await screen.findByRole('dialog', { name: '测试用户' });
     expect(chatDialog).toBeVisible();
 
-    fireEvent.change(within(chatDialog).getByLabelText('发消息给小舟AI'), {
+    fireEvent.change(within(chatDialog).getByLabelText('发消息给测试用户'), {
       target: { value: '你好' },
     });
     fireEvent.click(within(chatDialog).getByRole('button', { name: '发送' }));
 
-    expect(await within(chatDialog).findByText('好的,收到:「你好」')).toBeInTheDocument();
+    expect(await within(chatDialog).findByText('(测试用户自动回复)已收到:「你好」')).toBeInTheDocument();
   });
+
 
   it('收到的好友请求可以接受', async () => {
     fake.addUser('alice');
@@ -476,10 +274,10 @@ describe('好友面板', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '登录' }));
 
     // 登录后面板保持在打开状态
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
 
     // 激活好友请求钮 → 主列表显示收到的请求,再点对号接受(请求来自 alice)
-    await screen.findByRole('button', { name: /小舟AI/ });
+    await screen.findByRole('button', { name: /测试用户/ });
     const requestBtn = screen.getByRole('button', { name: '好友请求' });
     fireEvent.click(requestBtn);
     expect(requestBtn).toHaveAttribute('aria-pressed', 'true');

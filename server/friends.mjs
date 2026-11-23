@@ -2,7 +2,9 @@
  * 好友关系逻辑(存储接口见 store.mjs)。
  * 记录:{ id, users:[aId,bId](升序), status:'pending'|'accepted', requestedBy, createdAt, respondedAt? }
  */
-import { AI_ASSISTANT } from './chat.mjs';
+import { TEST_USER, ensureTestUserFriend } from './bot.mjs';
+
+export { TEST_USER };
 
 const fail = (error) => ({ ok: false, error });
 
@@ -75,12 +77,16 @@ export async function removeFriend(store, userId, friendshipId) {
   if (!record || record.status !== 'accepted' || !record.users.includes(userId)) {
     return fail('好友关系不存在');
   }
+  const otherId = record.users[0] === userId ? record.users[1] : record.users[0];
+  if (otherId === TEST_USER.id) return fail('测试用户不可删除');
   await store.deleteFriendship(record.id);
   return { ok: true };
 }
 
-/** 列表:当前用户自身状态 + 固定 AI 助手 + 已确认好友、收到待处理、发出待处理。 */
+/** 列表:当前用户自身状态 + 固定「测试用户」bot + 已确认好友、收到待处理、发出待处理。 */
 export async function listFriends(store, userId) {
+  // 幂等补建测试用户好友关系:存量用户首次打开面板时也能看到 bot(注册路径同样有兜底)。
+  await ensureTestUserFriend(store, userId);
   const records = await store.listFriendshipsFor(userId);
   const self = await store.getUserById(userId);
   const me = {
@@ -91,10 +97,10 @@ export async function listFriends(store, userId) {
   };
   const friends = [
     {
-      id: AI_ASSISTANT.id,
-      user: { id: AI_ASSISTANT.id, username: AI_ASSISTANT.username, online: true, avatar: AI_ASSISTANT.avatar },
+      id: TEST_USER.id,
+      user: { id: TEST_USER.id, username: TEST_USER.username, online: true, avatar: TEST_USER.avatar },
       since: '',
-      assistant: true,
+      bot: true,
     },
   ];
   const incoming = [];
@@ -102,6 +108,8 @@ export async function listFriends(store, userId) {
 
   for (const record of records) {
     const otherId = record.users[0] === userId ? record.users[1] : record.users[0];
+    // 测试用户已作为固定首项输出,跳过其 friendship 记录,避免重复。
+    if (otherId === TEST_USER.id) continue;
     const otherUser = await store.getUserById(otherId);
     const other = {
       id: otherId,

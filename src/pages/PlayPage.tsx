@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { findBySlug } from '../lib/browse';
 import { resolveLaunch } from '../lib/launch';
 import { DISABLED_LABELS, STATUS_LABELS } from '../lib/types';
 import { GAMES } from '../data';
+import { friendsApi } from '../lib/api';
 import { GameFrame } from '../components/GameFrame';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../state/auth';
@@ -14,20 +15,49 @@ import { UserArea } from '../components/UserArea';
  * 游戏运行页（/play/:slug）：平台外边框 + 游戏 iframe。
  * 新窗口打开的独立游戏界面：无左侧栏，顶栏承担标题与账号区；
  * 游戏逻辑全部在 iframe 内。仅站内游戏经由此页；外链游戏在详情页直接新窗口打开。
+ *
+ * 邀请深链(2026-11-23):好友点「进入」打开 ?invite=<id>,运行页取回该邀请的
+ * 游戏自定义参数,经 hello 的 join 字段交给游戏(平台只透传、不解析);
+ * 刷新后重取,参数可重复下发(游戏按自身状态决定是否再次入房)。
  */
 export function PlayPage() {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
   const game = findBySlug(GAMES, slug);
   const { status, user } = useAuth();
   const stageRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
+  // 游戏经 SDK 上报的当前可邀请加入参数(game:invite-context);null = 未上报/已离开。
+  const [inviteContext, setInviteContext] = useState<Record<string, unknown> | null>(null);
+  const inviteId = searchParams.get('invite');
+  const [joinParams, setJoinParams] = useState<Record<string, unknown> | null | undefined>(undefined);
 
   useEffect(() => {
     const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
+
+  // 邀请深链:登录态就绪后取邀请(仅接收方可见),拿回参数随 hello 下发。
+  useEffect(() => {
+    if (!inviteId || status !== 'user') {
+      setJoinParams(null);
+      return;
+    }
+    let cancelled = false;
+    friendsApi
+      .getInvite(inviteId)
+      .then((data) => {
+        if (!cancelled) setJoinParams(data.invite.params);
+      })
+      .catch(() => {
+        if (!cancelled) setJoinParams(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteId, status]);
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) {
@@ -136,8 +166,15 @@ export function PlayPage() {
           game={game}
           src={resolution.url}
           user={status === 'user' && user ? { id: user.id, username: user.username } : null}
+          join={joinParams ?? null}
+          onInviteContext={setInviteContext}
         />
-        {socialOpen && <SocialSidebar onClose={() => setSocialOpen(false)} />}
+        {socialOpen && (
+          <SocialSidebar
+            onClose={() => setSocialOpen(false)}
+            currentGame={{ slug: game.slug, title: game.title, params: inviteContext }}
+          />
+        )}
         <button
           type="button"
           className="btn btn-icon play-fullscreen-exit"

@@ -8,7 +8,8 @@ import {
   type PlatformHelloMessage,
   type GameDockEnv,
 } from '../src/index';
-import { FakeFetch, FakeWindow, autoReplyPlatform, helloMessage, makeEnv } from './fakes';
+import { FakeFetch, FakeWindow, autoReplyPlatform, helloMessage, helloWithJoin, makeEnv } from './fakes';
+
 
 function makeEnv_(hello: PlatformHelloMessage, fetcher: FakeFetch, parent?: FakeWindow, self?: FakeWindow): GameDockEnv {
   return makeEnv(hello, fetcher, parent, self);
@@ -47,7 +48,25 @@ describe('connectGameDock 握手', () => {
     });
     assert.equal(sdk.standalone, true);
   });
+
+  it('hello 携带 join 参数时原样暴露,无 join 时为 null(2026-11-23 好友邀请深链)', async () => {
+    const parent = new FakeWindow();
+    const self = new FakeWindow();
+    autoReplyPlatform(parent, helloWithJoin({ room: '123456', node: 'cn' }), self);
+    const sdk = await connectGameDock({
+      env: makeEnv_(helloWithJoin({ room: '123456', node: 'cn' }), new FakeFetch(() => new Response('{}')), parent, self),
+    });
+    assert.equal(sdk.standalone, false);
+    assert.deepEqual(sdk.join, { room: '123456', node: 'cn' });
+
+    const plain = await connectGameDock({
+      env: makeEnv_(helloMessage(), new FakeFetch(() => new Response('{}'))),
+      helloTimeoutMs: 30,
+    });
+    assert.equal(plain.join, null);
+  });
 });
+
 
 describe('saves API', () => {
   async function connectedSdk(responder: (call: { method: string; path: string; body?: unknown }) => Response) {
