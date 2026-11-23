@@ -135,7 +135,7 @@ export function SelfIdentity({ name, avatar, id }: { name: string; avatar: strin
         )}
         <div className="self-id-row">
           <span className="self-id-label">ID:</span>
-          <code className="self-id">{id}</code>
+          <span className="self-id">{id}</span>
           <button
             type="button"
             className="self-copy-btn"
