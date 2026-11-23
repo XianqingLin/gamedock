@@ -1556,6 +1556,13 @@ input {
   gap: 14px;
 }
 
+.friends-header {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* 顶行:左侧当前用户身份,右侧关闭钮。 */
 .friends-toolbar {
   display: flex;
   align-items: center;
@@ -1563,14 +1570,50 @@ input {
   gap: 10px;
 }
 
-.friends-toolbar-actions {
+.friends-self {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* 工具条区域 A:两条横线之间填另一种底色,左侧标题,右侧三个按钮。 */
+.friends-toolbar-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* 负外边距抵消抽屉内容的 22px 内边距,让 A 区域左右贴边填满。 */
+  margin: 0 -22px;
+  padding: 4px 22px;
+  border-top: 1px solid #3a3a40;
+  border-bottom: 1px solid #3a3a40;
+  background: #2b2b30;
+}
+
+.friends-toolbar-title {
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.friends-toolbar-group {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.friends-toolbar-spacer {
+.friends-toolbar-end {
+  display: flex;
+}
+
+/* 头像与名称+状态之间保持固定空隙(列表、请求、顶部统一)。 */
+.friend-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex: 1;
+  min-width: 0;
 }
 
 .friend-icon-btn {
@@ -1606,6 +1649,30 @@ input {
   background: #3a3a3f;
 }
 
+/* A 区域内三个按钮只显示图标:底色与 A 一致(透明),悬停/激活仅用图标颜色区分。 */
+.friends-toolbar-group .friend-icon-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.friends-toolbar-group .friend-icon-btn:hover {
+  background: transparent;
+  color: var(--ink);
+}
+
+.friends-toolbar-group .friend-icon-btn[aria-expanded='true'] {
+  background: transparent;
+  color: var(--ink);
+}
+
+/* 好友请求钮的激活态:图标变亮,表示主列表正显示申请。 */
+.friends-toolbar-group .friend-icon-btn[aria-pressed='true'] {
+  background: transparent;
+  color: var(--accent);
+}
+
 .friend-badge {
   position: absolute;
   top: 1px;
@@ -1621,21 +1688,40 @@ input {
   text-align: center;
 }
 
-/* 搜索:点击图标后图标行变为居中展开的搜索框。 */
+/* 搜索框从标题与搜索钮之间的中心向左右展开;只做 transform,不影响 A 宽度与右侧按钮位置。 */
 .friends-search {
+  position: relative;
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  min-width: 0;
+  /* 吸收隐藏的搜索钮占位(28px 宽 + 6px 间距),让搜索框向右贴近剩余按钮,且两钮位置不变。 */
+  margin-right: calc(-28px - 6px);
   transform-origin: center;
-  animation: search-reveal 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  animation: search-expand 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes search-expand {
+  from {
+    transform: scaleX(0.08);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* 搜索时隐藏搜索钮但保留占位,另外两个按钮不会被顶走。 */
+.friend-icon-btn.is-hidden {
+  visibility: hidden;
 }
 
 .friends-search input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
-  height: 36px;
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 40px 0 12px;
   border: 0;
   border-radius: 10px;
   background: var(--surface-hover);
@@ -1648,15 +1734,21 @@ input {
   box-shadow: 0 0 0 2px rgba(235, 235, 245, 0.28);
 }
 
-@keyframes search-reveal {
-  from {
-    transform: scaleX(0.35);
-    opacity: 0;
-  }
-  to {
-    transform: scaleX(1);
-    opacity: 1;
-  }
+/* 退出搜索的叉:放在搜索框内部右侧。 */
+.friends-search .friend-icon-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.friends-search .friend-icon-btn:hover {
+  background: transparent;
+  color: var(--ink);
 }
 
 /* 下滑面板(好友请求 / 添加好友):grid-rows 过渡实现双向滑动。 */
@@ -1762,14 +1854,6 @@ input {
   gap: 8px;
 }
 
-.friends-section-title {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-}
-
 .friends-list {
   list-style: none;
   margin: 0;
@@ -1843,9 +1927,9 @@ input {
 }
 
 .friend-avatar-lg {
-  width: 40px;
-  height: 40px;
-  font-size: 16px;
+  width: 48px;
+  height: 48px;
+  font-size: 19px;
 }
 
 .friend-meta {

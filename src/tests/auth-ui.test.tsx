@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
 
@@ -44,7 +44,10 @@ function makeFakeApi() {
         incoming.push({ id: r.id, from: { id: r.requestedBy, username: usernameOf(r.requestedBy) }, createdAt: r.id });
       }
     }
-    return { friends, incoming, outgoing };
+    const me = currentUserId
+      ? { id: currentUserId, username: usernameOf(currentUserId), online: true }
+      : null;
+    return { me, friends, incoming, outgoing };
   };
 
   const json = (data: unknown, status = 200) =>
@@ -278,14 +281,14 @@ describe('好友面板', () => {
     openFriendsPanel();
 
     // 等待面板初始加载完成,避免提交按钮仍处于 busy 禁用状态
-    await screen.findByText('我的好友');
+    await screen.findByRole('button', { name: /小舟AI/ });
     fireEvent.click(screen.getByRole('button', { name: '添加好友' }));
     fireEvent.change(await screen.findByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
       target: { value: bobId },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送好友请求' }));
 
-    // 发送成功后自动展开请求面板,能看到已发出的请求
+    // 发送成功后自动切到请求视图,能看到已发出的请求
     expect(await screen.findByText('等待处理')).toBeInTheDocument();
     expect(screen.getByText('bob')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '添加好友' })).toHaveAttribute('aria-expanded', 'false');
@@ -307,6 +310,26 @@ describe('好友面板', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '发送好友请求' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('找不到该用户');
+  });
+
+  it('搜索时工具区整行换成搜索框,退出搜索后恢复', async () => {
+    renderApp();
+    await registerViaUi('alice', 'secret66');
+    await screen.findByText('alice');
+    openFriendsPanel();
+    const panel = await screen.findByRole('dialog', { name: '好友' });
+    await within(panel).findByRole('button', { name: /小舟AI/ });
+
+    fireEvent.click(within(panel).getByRole('button', { name: '搜索好友' }));
+    expect(within(panel).queryByText('好友')).not.toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: '搜索好友' })).not.toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '好友请求' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '添加好友' })).toBeInTheDocument();
+    expect(within(panel).getByRole('textbox', { name: '搜索好友' })).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByRole('button', { name: '退出搜索' }));
+    expect(within(panel).getByText('好友')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '搜索好友' })).toBeInTheDocument();
   });
 
   it('点击 AI 助手弹出聊天框,发送消息并收到回复', async () => {
@@ -343,13 +366,17 @@ describe('好友面板', () => {
     await screen.findByText('bob');
     openFriendsPanel();
 
-    // 展开好友请求面板,再点对号接受(请求来自 alice)
+    // 激活好友请求钮 → 主列表显示收到的请求,再点对号接受(请求来自 alice)
     await screen.findByRole('button', { name: /小舟AI/ });
-    fireEvent.click(screen.getByRole('button', { name: '好友请求' }));
+    const requestBtn = screen.getByRole('button', { name: '好友请求' });
+    fireEvent.click(requestBtn);
+    expect(requestBtn).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(await screen.findByRole('button', { name: '接受 alice 的好友请求' }));
 
-    expect(await screen.findByText('我的好友')).toBeInTheDocument();
-    expect(screen.getByText('alice')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^接受/ })).not.toBeInTheDocument();
+    // 接受后该请求消失;再次点击请求钮退出激活态,好友列表里出现 alice
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^接受/ })).not.toBeInTheDocument());
+    fireEvent.click(requestBtn);
+    expect(requestBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(await screen.findByText('alice')).toBeInTheDocument();
   });
 });

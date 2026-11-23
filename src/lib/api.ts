@@ -25,6 +25,8 @@ export interface OutgoingRequestEntry {
 }
 
 export interface FriendLists {
+  /** 当前登录用户自身状态,与好友共用同一份 last_seen_at 判定。 */
+  me: { id: string; username: string; online?: boolean };
   friends: FriendEntry[];
   incoming: IncomingRequestEntry[];
   outgoing: OutgoingRequestEntry[];

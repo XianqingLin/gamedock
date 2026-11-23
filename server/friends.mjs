@@ -79,9 +79,15 @@ export async function removeFriend(store, userId, friendshipId) {
   return { ok: true };
 }
 
-/** 列表:固定 AI 助手 + 已确认好友、收到待处理、发出待处理。 */
+/** 列表:当前用户自身状态 + 固定 AI 助手 + 已确认好友、收到待处理、发出待处理。 */
 export async function listFriends(store, userId) {
   const records = await store.listFriendshipsFor(userId);
+  const self = await store.getUserById(userId);
+  const me = {
+    id: userId,
+    username: self?.username ?? '(已注销)',
+    online: isOnline(self?.lastSeenAt),
+  };
   const friends = [
     {
       id: AI_ASSISTANT.id,
@@ -110,5 +116,5 @@ export async function listFriends(store, userId) {
     }
   }
 
-  return { friends, incoming, outgoing };
+  return { me, friends, incoming, outgoing };
 }

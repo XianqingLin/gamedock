@@ -179,6 +179,12 @@ describe('在线心跳与好友在线状态', () => {
     const listsB = await b.request('GET', '/api/friends');
     const aEntry = listsB.data.friends.find((f) => f.user.id === aId);
     expect(aEntry.user.online).toBe(false);
+
+    // 自身状态与好友共用同一份 last_seen_at 判定:发过心跳的 b 在线,没发过心跳的 a 离线。
+    expect(listsB.data.me.id).toBe(bId);
+    expect(listsB.data.me.online).toBe(true);
+    expect(listsA.data.me.id).toBe(aId);
+    expect(listsA.data.me.online).toBe(false);
   });
 });
 
