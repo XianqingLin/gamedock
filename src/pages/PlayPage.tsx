@@ -7,7 +7,7 @@ import { GAMES } from '../data';
 import { GameFrame } from '../components/GameFrame';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../state/auth';
-import { SocialEntry } from '../components/SocialEntry';
+import { SocialSidebar } from '../components/SocialSidebar';
 import { UserArea } from '../components/UserArea';
 
 /**
@@ -21,6 +21,7 @@ export function PlayPage() {
   const { status, user } = useAuth();
   const stageRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [socialOpen, setSocialOpen] = useState(false);
 
   useEffect(() => {
     const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -113,10 +114,8 @@ export function PlayPage() {
       <header className="play-header">
         <h1 className="play-title">{game.title}</h1>
         <div className="play-account-actions">
-          <SocialEntry />
-          <UserArea />
-        </div>
-        <button
+          <UserArea onOpenFriends={() => setSocialOpen(true)} />
+        </div>        <button
           type="button"
           className="btn btn-icon play-fullscreen-toggle"
           aria-label={isFullscreen ? '退出全屏' : '全屏'}
@@ -138,6 +137,7 @@ export function PlayPage() {
           src={resolution.url}
           user={status === 'user' && user ? { id: user.id, username: user.username } : null}
         />
+        {socialOpen && <SocialSidebar onClose={() => setSocialOpen(false)} />}
         <button
           type="button"
           className="btn btn-icon play-fullscreen-exit"

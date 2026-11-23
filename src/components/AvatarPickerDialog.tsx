@@ -9,7 +9,7 @@ import { Modal } from './Modal';
  * 头像选择弹窗:展示当前头像 + 系统预设网格,点击即保存生效;
  * 「默认」项恢复首字母头像。失败保留原选择并就地报错。
  */
-export function AvatarPickerDialog({ onClose }: { onClose: () => void }) {
+export function AvatarPickerDialog({ onClose, overlayClass }: { onClose: () => void; overlayClass?: string }) {
   const { user, updateUser } = useAuth();
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +32,7 @@ export function AvatarPickerDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Modal title="选择头像" onClose={onClose}>
+    <Modal title="选择头像" onClose={onClose} overlayClass={overlayClass}>
       <div className="avatar-picker">
         <div className="avatar-picker-current">
           <UserAvatar user={user} className="avatar-picker-current-avatar" />

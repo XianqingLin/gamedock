@@ -121,46 +121,6 @@ input {
   color: var(--ink);
 }
 
-/* 二级目录:缩进列表,当前项用竖条标记,层级比一级轻。 */
-.app-sidebar-subnav {
-  display: grid;
-  gap: 2px;
-}
-
-.app-sidebar-sublink {
-  position: relative;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  padding: 0 14px 0 46px;
-  border-radius: var(--radius);
-  color: var(--muted);
-  font-size: 13px;
-  text-decoration: none;
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-.app-sidebar-sublink:hover {
-  background: var(--surface);
-  color: var(--ink);
-}
-
-.app-sidebar-sublink.is-active {
-  color: var(--ink);
-}
-
-.app-sidebar-sublink.is-active::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 20px;
-  width: 3px;
-  height: 14px;
-  border-radius: 2px;
-  background: var(--ink);
-  transform: translateY(-50%);
-}
-
 .app-content {
   flex: 1;
   min-width: 0;
@@ -507,55 +467,6 @@ input {
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.user-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 50;
-  width: 208px;
-  padding: 6px;
-  border: 1px solid #343439;
-  border-radius: 6px;
-  background: #19191c;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
-}
-
-.user-menu-item {
-  width: 100%;
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: #d8d8dc;
-  font-size: 14px;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-.user-menu-item:hover {
-  background: var(--surface-hover);
-  color: var(--ink);
-}
-
-.user-menu-item svg {
-  width: 19px;
-  height: 19px;
-  flex-shrink: 0;
-  color: var(--muted);
-}
-
-.user-menu-divider {
-  height: 1px;
-  margin: 6px 4px;
-  background: var(--line);
 }
 
 .guest-menu-actions {
@@ -1494,6 +1405,15 @@ input {
   min-height: 0;
   overflow-y: auto;
   padding: 22px;
+  display: flex;
+  flex-direction: column;
+}
+
+.social-drawer-content .friends-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .modal-header {
@@ -1622,6 +1542,59 @@ input {
   align-items: center;
   min-width: 0;
   overflow: hidden;
+}
+
+/* 自身身份区:头像(点击换头像)+ 名称(可编辑)+ ID 行。 */
+.friends-self-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* 游客态:面板内直接提供登录/注册。 */
+.friends-guest {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  padding: 40px 0 24px;
+}
+
+.friends-guest-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.friends-guest-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+
+/* 面板底部:退出登录。 */
+.friends-footer {
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.friends-logout {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
+  color: var(--danger);
+  border-color: var(--line);
+}
+
+.friends-logout svg {
+  width: 16px;
+  height: 16px;
+}
+
+.friends-logout:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: transparent;
 }
 
 /* 工具条区域 A:两条横线之间填另一种底色,左侧标题,右侧三个按钮。 */
@@ -2036,6 +2009,11 @@ input {
   z-index: 120;
 }
 
+/* 头像选择弹窗从好友抽屉内打开时,与聊天框同层抬高。 */
+.picker-overlay {
+  z-index: 120;
+}
+
 .chat-box {
   display: flex;
   flex-direction: column;
@@ -2116,12 +2094,6 @@ input {
   background: var(--surface);
 }
 
-.profile-identity {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
 .profile-page-title {
   margin: 0 0 28px;
   font-size: 22px;
@@ -2129,8 +2101,10 @@ input {
   letter-spacing: -0.4px;
 }
 
+/* ---------- 好友栏自身身份区(原个人信息页三要素收进面板) ---------- */
+
 /* 头像可点击更换:悬浮在圆上显示半透明遮罩图标。 */
-.profile-avatar-btn {
+.self-avatar-btn {
   position: relative;
   flex-shrink: 0;
   padding: 0;
@@ -2140,19 +2114,12 @@ input {
   cursor: pointer;
 }
 
-.profile-avatar-btn:focus-visible {
+.self-avatar-btn:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
-.profile-avatar {
-  width: 72px;
-  height: 72px;
-  font-size: 26px;
-  overflow: hidden;
-}
-
-.profile-avatar-edit {
+.self-avatar-edit {
   position: absolute;
   inset: 0;
   display: flex;
@@ -2165,43 +2132,44 @@ input {
   transition: opacity 150ms ease;
 }
 
-.profile-avatar-edit svg {
-  width: 22px;
-  height: 22px;
+.self-avatar-edit svg {
+  width: 18px;
+  height: 18px;
 }
 
-.profile-avatar-btn:hover .profile-avatar-edit,
-.profile-avatar-btn:focus-visible .profile-avatar-edit {
+.self-avatar-btn:hover .self-avatar-edit,
+.self-avatar-btn:focus-visible .self-avatar-edit {
   opacity: 1;
 }
 
-.profile-identity-text {
+.self-meta {
   min-width: 0;
 }
 
-.profile-name-row {
+.self-name-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
-.profile-name-row h1 {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: 30px;
+.self-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
   font-weight: 500;
-  letter-spacing: -0.7px;
-  line-height: 1.3;
 }
 
 /* 名称旁的编辑钮:悬浮/聚焦时出现。 */
-.profile-edit-btn {
+.self-edit-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
   border-radius: var(--radius);
@@ -2212,69 +2180,75 @@ input {
   transition: opacity 150ms ease, color 150ms ease, background-color 150ms ease;
 }
 
-.profile-edit-btn svg {
-  width: 16px;
-  height: 16px;
+.self-edit-btn svg {
+  width: 15px;
+  height: 15px;
 }
 
-.profile-name-row:hover .profile-edit-btn,
-.profile-edit-btn:focus-visible {
+.self-name-row:hover .self-edit-btn,
+.self-edit-btn:focus-visible {
   opacity: 1;
 }
 
-.profile-edit-btn:hover {
+.self-edit-btn:hover {
   color: var(--ink);
   background: var(--surface-hover);
 }
 
-.profile-name-edit {
+.self-name-edit {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
 
-.profile-name-edit input {
-  width: 220px;
-  min-height: 38px;
-  padding: 0 12px;
+.self-name-edit input {
+  width: 160px;
+  min-height: 34px;
+  padding: 0 10px;
   border: 1px solid #39393f;
   border-radius: var(--radius);
   outline: 0;
   background: #101012;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 14px;
   transition: border-color 150ms ease;
 }
 
-.profile-name-edit input:focus {
+.self-name-edit input:focus {
   border-color: #777780;
 }
 
-.profile-name-error {
+.self-name-error {
   margin: 6px 0 0;
 }
 
-/* 用户 ID 在名称下方;悬浮/聚焦该行时右侧出现复制图标钮。 */
-.profile-id-row {
+/* 「ID:」行:悬浮/聚焦该行时右侧出现复制图标钮。 */
+.self-id-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 5px;
+  margin-top: 5px;
 }
 
-.profile-id {
+.self-id-label {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.self-id {
+  color: var(--muted);
+  font-size: 12px;
   letter-spacing: 0.4px;
 }
 
-.profile-copy-btn {
+.self-copy-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: var(--radius);
@@ -2285,24 +2259,24 @@ input {
   transition: opacity 150ms ease, color 150ms ease, background-color 150ms ease;
 }
 
-.profile-copy-btn svg {
-  width: 14px;
-  height: 14px;
+.self-copy-btn svg {
+  width: 13px;
+  height: 13px;
 }
 
-.profile-id-row:hover .profile-copy-btn,
-.profile-copy-btn:focus-visible {
+.self-id-row:hover .self-copy-btn,
+.self-copy-btn:focus-visible {
   opacity: 1;
 }
 
-.profile-copy-btn:hover {
+.self-copy-btn:hover {
   color: var(--ink);
   background: var(--surface-hover);
 }
 
-.profile-copied-hint {
+.self-copied-hint {
   color: var(--success);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 /* ---------- 头像选择弹窗 ---------- */

@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { SocialEntry } from './SocialEntry';
+import { SocialSidebar } from './SocialSidebar';
 import { UserArea } from './UserArea';
 import { SearchBar } from './SearchBar';
 import { useBackToParent } from '../lib/navStack';
 
 /**
- * 右侧工作区顶栏：返回按钮、搜索框与「探索/浏览」导航居左，全局社交与账号入口居右。
- * 搜索词与浏览页 URL（?q=）双向同步；在浏览页外输入时跳转到浏览页。
+ * 右侧工作区顶栏：返回按钮、搜索框与「探索/浏览」导航居左,账号入口(即好友栏入口)居右。
+ * 点击顶栏头像/名称直接滑出好友栏;搜索词与浏览页 URL（?q=）双向同步;在浏览页外输入时跳转到浏览页。
  * 返回按钮为层级式：详情页的上级是浏览页——后退至历史中最近的浏览页位置
  * （跳过运行页等非上级页面），历史中没有浏览页时直达浏览页；
  * 探索、浏览等顶级页面无上级，按钮呈禁用态。
@@ -18,6 +18,8 @@ export function SiteHeader() {
   const [params, setParams] = useSearchParams();
   const onBrowse = location.pathname === '/browse';
   const [input, setInput] = useState(params.get('q') ?? '');
+  const [socialOpen, setSocialOpen] = useState(false);
+  const closeSocial = useCallback(() => setSocialOpen(false), []);
 
   // 层级式上级：目前只有游戏详情页有上级（浏览页）。
   const parent = /^\/games\/[^/]+$/.test(location.pathname) ? '/browse' : null;
@@ -86,10 +88,10 @@ export function SiteHeader() {
           </nav>
         </div>
         <div className="site-header-actions">
-          <SocialEntry />
-          <UserArea />
+          <UserArea onOpenFriends={() => setSocialOpen(true)} />
         </div>
       </div>
+      {socialOpen && <SocialSidebar onClose={closeSocial} />}
     </header>
   );
 }

@@ -2,22 +2,27 @@ import { useCallback, useEffect, useState } from 'react';
 import { friendsApi } from '../lib/api';
 import type { FriendEntry, FriendLists } from '../lib/api';
 import { useAuth } from '../state/auth';
+import { AuthDialog } from './AuthDialog';
+import type { AuthMode } from './AuthDialog';
 import { ChatBox } from './ChatBox';
 import { Modal } from './Modal';
 import { UserAvatar } from './UserAvatar';
+import { SelfIdentity } from './SelfIdentity';
 
 /**
- * 好友面板(苹果风):顶行左侧为当前用户身份(头像/名称/状态),右侧为关闭钮;
+ * 好友面板(苹果风):顶行左侧为当前用户身份(头像可点开换头像弹窗、名称旁编辑钮改名、
+ * 「ID:」+ 用户 ID 悬浮可复制),右侧为关闭钮;
  * 工具独占一行:两条横线之间填另一种底色的带状区域,左侧「好友」标题,右侧三个圆形图标钮(搜索/好友请求/添加好友)。
  * 好友请求钮是切换钮:激活时主列表显示收到的/发出的全部请求,再次点击切回好友列表;
  * 搜索点击后标题与搜索钮让位给搜索框(从中点向左右展开、A 宽度不变、叉在框内右侧),
  * 好友请求与添加好友两钮保持原位;添加好友以下滑面板呈现。
  * 固定 AI 助手「小舟AI」永远在好友列表首位,不可删除,点击打开聊天框;
- * 在线状态(含当前用户)来自真实心跳(/api/presence),由服务端统一判定。
+ * 好友在线状态来自真实心跳(/api/presence),由服务端统一判定(自身身份区显示 ID 而非在线状态)。
+ * 面板底部提供退出登录;游客态在面板内提供登录/注册入口。
  * 所有操作失败都以服务端错误文案展示,不假装成功。
  */
 export function FriendsPanel({ onClose }: { onClose: () => void }) {
-  const { status, user } = useAuth();
+  const { status, user, logout } = useAuth();
   const [lists, setLists] = useState<FriendLists | null>(null);
   const [input, setInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
@@ -27,6 +32,7 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
   const [showRequests, setShowRequests] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [dialog, setDialog] = useState<AuthMode | null>(null);
 
   const apply = useCallback(async (action: () => Promise<FriendLists>) => {
     setActionError(null);
@@ -62,7 +68,25 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </header>
-        <p className="friends-empty">登录或注册后才能使用好友功能。</p>
+        <div className="friends-guest">
+          <p className="friends-guest-text">登录或注册后才能使用好友功能。</p>
+          <div className="friends-guest-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setDialog('login')}
+              title={status === 'error' ? '无法确认登录状态，可尝试重新登录' : undefined}
+            >
+              登录
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setDialog('register')}>
+              注册
+            </button>
+          </div>
+        </div>
+        {(dialog === 'login' || dialog === 'register') && (
+          <AuthDialog mode={dialog} onClose={() => setDialog(null)} onSwitchMode={(mode) => setDialog(mode)} />
+        )}
       </div>
     );
   }
@@ -110,11 +134,10 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
       <div className="friends-header">
         <header className="friends-toolbar">
           <div className="friends-self">
-            <FriendIdentity
+            <SelfIdentity
               name={lists?.me?.username ?? user?.username ?? ''}
               avatar={lists?.me?.avatar ?? user?.avatar ?? null}
-              online={lists?.me?.online}
-              large
+              id={user?.id ?? ''}
             />
           </div>
           <div className="friends-toolbar-end">
@@ -280,6 +303,21 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
           )}
         </section>
       )}
+
+      <div className="friends-footer">
+        <button type="button" className="btn btn-secondary friends-logout" onClick={() => void logout()}>
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          退出登录
+        </button>
+      </div>
 
       {chatPeer && (
         <Modal title={chatPeer.name} overlayClass="chat-overlay" onClose={() => setChatPeer(null)}>

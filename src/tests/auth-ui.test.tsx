@@ -232,16 +232,21 @@ const renderApp = (initialEntries: string[] = ['/']) =>
     </MemoryRouter>,
   );
 
-/** 通过右侧顶栏的头像与名称打开用户菜单。 */
-async function openUserMenu(name = '游客') {
-  const userTrigger = await screen.findByRole('button', { name });
-  if (userTrigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(userTrigger);
+/** 点击右侧顶栏的头像/名称打开好友栏(登录与游客同一入口)。 */
+async function openPanel(name = '游客') {
+  const trigger = await screen.findByRole('button', { name });
+  fireEvent.click(trigger);
+}
+
+/** 关闭好友栏(测试继续操作侧栏时需要)。 */
+function closePanel() {
+  fireEvent.click(screen.getByRole('button', { name: '关闭弹窗' }));
 }
 
 /** 打开注册弹窗并提交表单。 */
 async function registerViaUi(username: string, password: string) {
-  await openUserMenu();
-  // 菜单项渲染可能稍晚于点击，用异步查询避免竞态
+  await openPanel();
+  // 游客态面板内点「注册」打开弹窗;弹窗内按钮用 dialog 范围查询避免歧义
   fireEvent.click(await screen.findByRole('button', { name: '注册' }));
   const dialog = screen.getByRole('dialog', { name: '注册' });
   fireEvent.change(within(dialog).getByLabelText('用户名'), { target: { value: username } });
@@ -249,20 +254,18 @@ async function registerViaUi(username: string, password: string) {
   fireEvent.click(within(dialog).getByRole('button', { name: '注册' }));
 }
 
-function openFriendsPanel() {
-  fireEvent.click(screen.getByRole('button', { name: '好友' }));
-}
-
 describe('应用导航与社交浮层', () => {
-  it('左侧提供「游戏」入口，顶栏提供探索与浏览导航，好友按需从顶栏打开并可关闭', async () => {
+  it('左侧提供游戏/成就墙/存档入口，顶栏提供探索与浏览导航，头像打开好友栏并可关闭', async () => {
     renderApp();
     expect(screen.getByRole('link', { name: '游戏' })).toBeVisible();
+    expect(screen.getByRole('link', { name: '成就墙' })).toBeVisible();
+    expect(screen.getByRole('link', { name: '存档' })).toBeVisible();
     expect(screen.getByRole('link', { name: '探索' })).toBeVisible();
     expect(screen.getByRole('link', { name: '浏览' })).toBeVisible();
     expect(await screen.findByRole('button', { name: '游客' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '好友' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '好友' }));
+    fireEvent.click(screen.getByRole('button', { name: '游客' }));
     expect(screen.getByRole('dialog', { name: '好友' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '关闭弹窗' }));
     expect(screen.queryByRole('dialog', { name: '好友' })).not.toBeInTheDocument();
@@ -270,12 +273,12 @@ describe('应用导航与社交浮层', () => {
 });
 
 describe('游客身份', () => {
-  it('默认显示游客头像与名称，菜单中提供登录和注册', async () => {
+  it('默认显示游客头像与名称，点头像在好友栏内提供登录和注册', async () => {
     renderApp();
     expect(screen.queryByRole('button', { name: '登录' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '注册' })).not.toBeInTheDocument();
 
-    await openUserMenu();
+    await openPanel();
     expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '注册' })).toBeInTheDocument();
   });
@@ -287,73 +290,57 @@ describe('游客身份', () => {
     expect(screen.getByRole('dialog', { name: '注册' })).toBeInTheDocument();
   });
 
-  it('注册成功后顶栏显示用户名,可退出登录', async () => {
+  it('注册成功后顶栏显示用户名,好友栏底部可退出登录', async () => {
     renderApp();
     await registerViaUi('小林', 'secret66');
 
-    expect(await screen.findByText('小林')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
-    await openUserMenu('小林');
-    fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
-    await openUserMenu();
-    expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
+    expect((await screen.findAllByText('小林')).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('dialog', { name: '注册' })).not.toBeInTheDocument();
+    // 注册弹窗关闭后好友栏仍开着,底部有退出登录;退出后面板回到游客态
+    fireEvent.click(await screen.findByRole('button', { name: '退出登录' }));
+    expect(await screen.findByRole('button', { name: '登录' })).toBeInTheDocument();
   });
 
-  it('已登录用户可以从头像菜单进入个人主页,主页展示名称与用户 ID', async () => {
-    renderApp();
-    await registerViaUi('alice', 'secret66');
-    await openUserMenu('alice');
-
-    const menu = within(screen.getByRole('group', { name: '用户操作' }));
-    fireEvent.click(menu.getByRole('link', { name: '个人主页' }));
-    expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
-    // 新版主页:ID 在名称下方悬浮出复制钮;侧栏个人主页二级目录展开
-    expect(screen.getByRole('button', { name: '复制用户 ID' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '更换头像' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '个人信息' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '成就墙' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '存档' })).toBeInTheDocument();
-  });
-
-  it('个人主页内联改名:保存后顶栏与主页同步,重名报服务端错误', async () => {
+  it('好友栏自身身份区:展示 ID 与复制钮,内联改名全局同步,重名报服务端错误', async () => {
     fake.addUser('bob');
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
-    await screen.findByRole('heading', { name: 'alice' });
+    await screen.findByRole('button', { name: /小舟AI/ });
+    const panel = screen.getByRole('dialog', { name: '好友' });
+    // 自身区不再显示在线状态,改为「ID:」+ 用户 ID,悬浮出复制钮
+    expect(within(panel).getByText('ID:')).toBeInTheDocument();
+    expect(within(panel).queryByText(/在线/)).not.toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '复制用户 ID' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑用户名' }));
-    const input = screen.getByRole('textbox', { name: '用户名' });
+    fireEvent.click(within(panel).getByRole('button', { name: '编辑用户名' }));
+    const input = within(panel).getByRole('textbox', { name: '用户名' });
     fireEvent.change(input, { target: { value: 'bob' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '保存' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('用户名已存在');
-    // 编辑态下 h1 被表单替换,改名失败停留在编辑态
-    expect(screen.getByRole('textbox', { name: '用户名' })).toHaveValue('bob');
+    // 改名失败停留在编辑态
+    expect(within(panel).getByRole('textbox', { name: '用户名' })).toHaveValue('bob');
 
-    fireEvent.change(screen.getByRole('textbox', { name: '用户名' }), { target: { value: 'alice2' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect(await screen.findByRole('heading', { name: 'alice2' })).toBeInTheDocument();
+    fireEvent.change(within(panel).getByRole('textbox', { name: '用户名' }), { target: { value: 'alice2' } });
+    fireEvent.click(within(panel).getByRole('button', { name: '保存' }));
+    expect(await screen.findByText('alice2')).toBeInTheDocument();
   });
 
-  it('头像弹窗:点击预设立即保存,重新进入仍选中', async () => {
+  it('好友栏点击自身头像弹窗:点击预设立即保存,重开仍选中', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
-    await screen.findByRole('heading', { name: 'alice' });
+    await screen.findByRole('button', { name: /小舟AI/ });
+    const panel = screen.getByRole('dialog', { name: '好友' });
 
-    fireEvent.click(screen.getByRole('button', { name: '更换头像' }));
-    const dialog = screen.getByRole('dialog', { name: '选择头像' });
-    const fox = within(dialog).getByRole('option', { name: /狐狸/ });
+    fireEvent.click(within(panel).getByRole('button', { name: '更换头像' }));
+    const picker = await screen.findByRole('dialog', { name: '选择头像' });
+    const fox = within(picker).getByRole('option', { name: /狐狸/ });
     expect(fox).toHaveAttribute('aria-selected', 'false');
     fireEvent.click(fox);
     await waitFor(() => expect(fox).toHaveAttribute('aria-selected', 'true'));
 
-    fireEvent.keyDown(dialog, { key: 'Escape' });
-    fireEvent.click(screen.getByRole('button', { name: '更换头像' }));
-    const reopened = screen.getByRole('dialog', { name: '选择头像' });
+    fireEvent.keyDown(picker, { key: 'Escape' });
+    fireEvent.click(within(panel).getByRole('button', { name: '更换头像' }));
+    const reopened = await screen.findByRole('dialog', { name: '选择头像' });
     expect(within(reopened).getByRole('option', { name: /狐狸/ })).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -363,9 +350,9 @@ describe('游客身份', () => {
     fake.seedSave('tether-together', 'checkpoint');
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
-    fireEvent.click(await screen.findByRole('link', { name: '存档' }));
+    await screen.findByRole('button', { name: /小舟AI/ });
+    closePanel();
+    fireEvent.click(screen.getByRole('link', { name: '存档' }));
 
     expect(await screen.findByRole('heading', { name: '死神 VS 火影 重构版' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '默契行动' })).toBeInTheDocument();
@@ -382,9 +369,9 @@ describe('游客身份', () => {
   it('存档页空状态', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
-    fireEvent.click(await screen.findByRole('link', { name: '存档' }));
+    await screen.findByRole('button', { name: /小舟AI/ });
+    closePanel();
+    fireEvent.click(screen.getByRole('link', { name: '存档' }));
     expect(await screen.findByText('暂无存档')).toBeInTheDocument();
   });
 });
@@ -392,7 +379,7 @@ describe('游客身份', () => {
 describe('好友面板', () => {
   it('未登录时在面板内提示先登录或注册', async () => {
     renderApp();
-    openFriendsPanel();
+    await openPanel();
     expect(await screen.findByText('登录或注册后才能使用好友功能。')).toBeInTheDocument();
   });
 
@@ -401,8 +388,8 @@ describe('好友面板', () => {
     const bobId = fake.users.get('bob')!.id;
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    openFriendsPanel();
+    // 注册后好友栏保持打开
+    await screen.findByRole('button', { name: /小舟AI/ });
 
     // 等待面板初始加载完成,避免提交按钮仍处于 busy 禁用状态
     await screen.findByRole('button', { name: /小舟AI/ });
@@ -421,8 +408,7 @@ describe('好友面板', () => {
   it('好友列表固定包含不可删除的 AI 助手,发送请求失败显示服务端错误', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    openFriendsPanel();
+    await screen.findByRole('button', { name: /小舟AI/ });
 
     await screen.findByRole('button', { name: /小舟AI/ });
     // AI 助手不可删除:列表里唯一的「删除」按钮数量等于人类好友数量(0)。
@@ -439,8 +425,7 @@ describe('好友面板', () => {
   it('搜索时工具区整行换成搜索框,退出搜索后恢复', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    openFriendsPanel();
+    await screen.findByRole('button', { name: /小舟AI/ });
     const panel = await screen.findByRole('dialog', { name: '好友' });
     await within(panel).findByRole('button', { name: /小舟AI/ });
 
@@ -459,8 +444,7 @@ describe('好友面板', () => {
   it('点击 AI 助手弹出聊天框,发送消息并收到回复', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
-    await screen.findByText('alice');
-    openFriendsPanel();
+    await screen.findByRole('button', { name: /小舟AI/ });
 
     fireEvent.click(await screen.findByRole('button', { name: /小舟AI/ }));
     const chatDialog = await screen.findByRole('dialog', { name: '小舟AI' });
@@ -481,14 +465,15 @@ describe('好友面板', () => {
     renderApp();
 
     // 以 bob 身份登录
-    await openUserMenu();
+    await openPanel();
     fireEvent.click(await screen.findByRole('button', { name: '登录' }));
     const dialog = screen.getByRole('dialog', { name: '登录' });
     fireEvent.change(within(dialog).getByLabelText('用户名'), { target: { value: 'bob' } });
     fireEvent.change(within(dialog).getByLabelText('密码'), { target: { value: 'irrelevant' } });
     fireEvent.click(within(dialog).getByRole('button', { name: '登录' }));
-    await screen.findByText('bob');
-    openFriendsPanel();
+
+    // 登录后面板保持在打开状态
+    await screen.findByRole('button', { name: /小舟AI/ });
 
     // 激活好友请求钮 → 主列表显示收到的请求,再点对号接受(请求来自 alice)
     await screen.findByRole('button', { name: /小舟AI/ });

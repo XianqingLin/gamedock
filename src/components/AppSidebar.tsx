@@ -1,14 +1,10 @@
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 
 /**
- * 全站左侧栏:品牌 + 「游戏」「个人主页」入口。
- * 「探索/浏览」导航只在右侧顶栏,不在侧栏展开;
- * 「个人主页」含二级目录(个人信息/成就墙/存档),位于个人主页区块时自动展开。
+ * 全站左侧栏:品牌 + 「游戏」「成就墙」「存档」三个顶级入口(与游戏同级,均为页面级栏目)。
+ * 「探索/浏览」导航只在右侧顶栏,不在侧栏展开。
  */
 export function AppSidebar() {
-  const { pathname } = useLocation();
-  const profileSection = pathname.startsWith('/profile');
-
   return (
     <aside className="app-sidebar">
       <div className="app-sidebar-brand">
@@ -41,44 +37,43 @@ export function AppSidebar() {
         </NavLink>
 
         <NavLink
-          to="/profile"
+          to="/achievements"
           className={({ isActive }) => `app-sidebar-link${isActive ? ' is-active' : ''}`}
         >
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M8 4h8v4.5a4 4 0 0 1-8 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
             <path
-              d="M5 20c.5-4.3 2.8-6.5 7-6.5s6.5 2.2 7 6.5"
+              d="M8 5.5H5.2a2.8 2.8 0 0 0 2.9 3.4M16 5.5h2.8a2.8 2.8 0 0 1-2.9 3.4"
               stroke="currentColor"
               strokeWidth="1.5"
               strokeLinecap="round"
             />
+            <path d="M12 12.5v3M9 20h6l-.6-4.5H9.6Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
           </svg>
-          <span>个人主页</span>
+          <span>成就墙</span>
         </NavLink>
 
-        {profileSection && (
-          <div className="app-sidebar-subnav">
-            <NavLink
-              to="/profile"
-              end
-              className={({ isActive }) => `app-sidebar-sublink${isActive ? ' is-active' : ''}`}
-            >
-              个人信息
-            </NavLink>
-            <NavLink
-              to="/profile/achievements"
-              className={({ isActive }) => `app-sidebar-sublink${isActive ? ' is-active' : ''}`}
-            >
-              成就墙
-            </NavLink>
-            <NavLink
-              to="/profile/saves"
-              className={({ isActive }) => `app-sidebar-sublink${isActive ? ' is-active' : ''}`}
-            >
-              存档
-            </NavLink>
-          </div>
-        )}
+        <NavLink
+          to="/saves"
+          className={({ isActive }) => `app-sidebar-link${isActive ? ' is-active' : ''}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2H4Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M5 9v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+            <path d="M10 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <span>存档</span>
+        </NavLink>
       </nav>
     </aside>
   );
