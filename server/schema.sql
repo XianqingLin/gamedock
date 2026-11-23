@@ -23,3 +23,15 @@ CREATE TABLE IF NOT EXISTS friendships (
 
 CREATE INDEX IF NOT EXISTS idx_friendships_user_a ON friendships (user_a);
 CREATE INDEX IF NOT EXISTS idx_friendships_user_b ON friendships (user_b);
+
+-- 平台聊天(当前仅 AI 助手「小舟AI」;user_id 为会话主人,peer_id 为对方)。
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  peer_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_user_peer ON chat_messages (user_id, peer_id);

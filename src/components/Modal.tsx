@@ -6,21 +6,32 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   variant?: 'dialog' | 'drawer';
+  /** 追加到遮罩层上的类名(如聊天框叠在好友抽屉之上时抬高 z-index)。 */
+  overlayClass?: string;
 }
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** 当前打开的弹层栈:Escape/Tab 只由最顶层弹层处理,避免弹层叠弹层时双重响应。 */
+const modalStack: symbol[] = [];
+
 /**
  * 通用模态弹层:焦点移入并圈定在弹层内,Escape 关闭,
  * 关闭后焦点恢复到原入口(产品需求 6.2)。
  */
-export function Modal({ title, onClose, children, variant = 'dialog' }: ModalProps) {
+export function Modal({ title, onClose, children, variant = 'dialog', overlayClass }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const tokenRef = useRef<symbol | null>(null);
 
   useEffect(() => {
     previouslyFocused.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const token = Symbol('modal');
+    tokenRef.current = token;
+    modalStack.push(token);
+    const isTopmost = () => modalStack[modalStack.length - 1] === token;
 
     const dialog = dialogRef.current;
     if (dialog) {
@@ -30,6 +41,7 @@ export function Modal({ title, onClose, children, variant = 'dialog' }: ModalPro
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!isTopmost()) return;
       if (event.key === 'Escape') {
         event.stopPropagation();
         onClose();
@@ -56,6 +68,8 @@ export function Modal({ title, onClose, children, variant = 'dialog' }: ModalPro
 
     document.addEventListener('keydown', onKeyDown, true);
     return () => {
+      const index = modalStack.indexOf(token);
+      if (index !== -1) modalStack.splice(index, 1);
       document.removeEventListener('keydown', onKeyDown, true);
       previouslyFocused.current?.focus();
     };
@@ -63,7 +77,7 @@ export function Modal({ title, onClose, children, variant = 'dialog' }: ModalPro
 
   return (
     <div
-      className={`modal-overlay${variant === 'drawer' ? ' drawer-overlay' : ''}`}
+      className={`modal-overlay${variant === 'drawer' ? ' drawer-overlay' : ''}${overlayClass ? ` ${overlayClass}` : ''}`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

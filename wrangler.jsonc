@@ -37,6 +37,12 @@
       "bucket_name": "gamedock-games"
     }
   ],
+  // AI 助手(小舟AI)通用 API:OpenAI 兼容的 chat/completions 端点与模型名;
+  // 密钥不入库:wrangler secret put AI_API_KEY。两者未配置时聊天返回明确报错。
+  "vars": {
+    "AI_API_BASE_URL": "",
+    "AI_API_MODEL": ""
+  },
   "observability": {
     "enabled": true
   }

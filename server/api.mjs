@@ -1,5 +1,6 @@
 import { registerUser, verifyLogin, publicUser } from './auth.mjs';
 import { sendFriendRequest, respondToRequest, cancelRequest, removeFriend, listFriends } from './friends.mjs';
+import { listChatMessages, sendChatMessage } from './chat.mjs';
 import {
   SESSION_COOKIE,
   parseCookies,
@@ -90,6 +91,7 @@ async function routeApi(request, env) {
 
   if (await handleAuthApi(ctx, pathname)) return ctx.response;
   if (await handleFriendsApi(ctx, pathname)) return ctx.response;
+  if (await handleChatApi(ctx, pathname)) return ctx.response;
   if (await handleSavesApi(ctx, pathname)) return ctx.response;
 
   return sendJson(404, { error: '接口不存在' });
@@ -205,7 +207,7 @@ async function handleFriendsApi(ctx, pathname) {
   if (pathname === '/api/friends/requests' && method === 'POST') {
     const body = await readJsonBody(ctx.request);
     if (!body) return respond(ctx, sendJson(400, { error: '请求体无效' }));
-    const result = await sendFriendRequest(env.store, user.id, body.username);
+    const result = await sendFriendRequest(env.store, user.id, body.id);
     if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
     return respond(ctx, sendJson(200, await listFriends(env.store, user.id)));
   }
@@ -222,6 +224,42 @@ async function handleFriendsApi(ctx, pathname) {
     const result = await removeFriend(env.store, user.id, friendMatch[1]);
     if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
     return respond(ctx, sendJson(200, await listFriends(env.store, user.id)));
+  }
+
+  return respond(ctx, sendJson(404, { error: '接口不存在' }));
+}
+
+/**
+ * 平台聊天:GET /api/chat/:peer(历史)、POST /api/chat/:peer(发送,返回用户消息 + AI 回复)。
+ * 需登录;当前仅 AI 助手「小舟AI」一个会话(peer 固定),AI 配置见 env.ai。
+ */
+async function handleChatApi(ctx, pathname) {
+  if (!pathname.startsWith('/api/chat')) return false;
+  const { env, method } = ctx;
+
+  const user = await requireAuth(ctx);
+  if (!user) return true;
+
+  const match = /^\/api\/chat\/([\w-]+)$/.exec(pathname);
+  if (!match) return respond(ctx, sendJson(404, { error: '接口不存在' }));
+  const [, peerId] = match;
+
+  if (method === 'GET') {
+    const result = await listChatMessages(env.store, user.id, peerId);
+    if (!result.ok) return respond(ctx, sendJson(404, { error: result.error }));
+    return respond(ctx, sendJson(200, { messages: result.messages }));
+  }
+
+  if (method === 'POST') {
+    const body = await readJsonBody(ctx.request);
+    if (!body) return respond(ctx, sendJson(400, { error: '请求体无效' }));
+    const result = await sendChatMessage(env.store, user.id, peerId, body.content, env.ai);
+    if (!result.ok) {
+      // AI 环节失败(用户消息已落库)返回 5xx,入参校验错误返回 400——前端据此决定是否补显用户消息。
+      const status = result.code === 'ai_unconfigured' ? 503 : result.code ? 502 : 400;
+      return respond(ctx, sendJson(status, { error: result.error }));
+    }
+    return respond(ctx, sendJson(200, { messages: result.messages }));
   }
 
   return respond(ctx, sendJson(404, { error: '接口不存在' }));

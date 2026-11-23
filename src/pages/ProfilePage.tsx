@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SiteHeader } from '../components/SiteHeader';
 import { EmptyState } from '../components/EmptyState';
@@ -5,6 +6,19 @@ import { useAuth } from '../state/auth';
 
 export function ProfilePage() {
   const { status, user } = useAuth();
+  const [copied, setCopied] = useState(false);
+
+  const copyId = async () => {
+    if (!user) return;
+    try {
+      await navigator.clipboard.writeText(user.id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 剪贴板不可用(如非安全上下文):保留文本可手动选中复制。
+      setCopied(false);
+    }
+  };
 
   return (
     <div className="page profile-page">
@@ -24,6 +38,15 @@ export function ProfilePage() {
               </div>
             </div>
             <dl className="profile-fields">
+              <div>
+                <dt>用户 ID</dt>
+                <dd className="profile-user-id">
+                  <code>{user.id}</code>
+                  <button type="button" className="btn-link" onClick={() => void copyId()}>
+                    {copied ? '已复制' : '复制'}
+                  </button>
+                </dd>
+              </div>
               <div>
                 <dt>用户名</dt>
                 <dd>{user.username}</dd>

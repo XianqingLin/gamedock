@@ -8,6 +8,8 @@ export interface FriendEntry {
   id: string;
   user: Pick<ApiUser, 'id' | 'username'>;
   since: string;
+  /** 固定 AI 助手(不可删除,点击打开聊天)。 */
+  assistant?: boolean;
 }
 
 export interface IncomingRequestEntry {
@@ -26,6 +28,14 @@ export interface FriendLists {
   friends: FriendEntry[];
   incoming: IncomingRequestEntry[];
   outgoing: OutgoingRequestEntry[];
+}
+
+export interface ChatMessage {
+  id: string;
+  peer: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
 }
 
 export class ApiError extends Error {
@@ -62,10 +72,19 @@ export const authApi = {
 
 export const friendsApi = {
   list: () => apiRequest<FriendLists>('/api/friends'),
-  sendRequest: (username: string) =>
-    apiRequest<FriendLists>('/api/friends/requests', { method: 'POST', body: { username } }),
+  sendRequest: (id: string) =>
+    apiRequest<FriendLists>('/api/friends/requests', { method: 'POST', body: { id } }),
   respond: (requestId: string, accept: boolean) =>
     apiRequest<FriendLists>(`/api/friends/requests/${requestId}/${accept ? 'accept' : 'decline'}`, { method: 'POST' }),
   cancel: (requestId: string) => apiRequest<FriendLists>(`/api/friends/requests/${requestId}`, { method: 'DELETE' }),
   remove: (friendshipId: string) => apiRequest<FriendLists>(`/api/friends/${friendshipId}`, { method: 'DELETE' }),
+};
+
+export const chatApi = {
+  history: (peer: string) => apiRequest<{ messages: ChatMessage[] }>(`/api/chat/${encodeURIComponent(peer)}`),
+  send: (peer: string, content: string) =>
+    apiRequest<{ messages: ChatMessage[] }>(`/api/chat/${encodeURIComponent(peer)}`, {
+      method: 'POST',
+      body: { content },
+    }),
 };

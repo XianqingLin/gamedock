@@ -1,6 +1,6 @@
 # GameDock
 
-GameDock([gamedock.cn](https://gamedock.cn))——网页游戏平台:游戏库 + 账号 + 好友社交(个人学习项目)。游戏以跨源 iframe 运行在独立内容域 `games.gamedock.cn`,平台层不做联机。部署在 Cloudflare Workers(D1 存用户/好友,KV 存玩家存档,R2 存游戏静态资源)。
+GameDock([gamedock.cn](https://gamedock.cn))——网页游戏平台:游戏库 + 账号 + 好友社交(含 AI 助手「小舟AI」聊天)(个人学习项目)。游戏以跨源 iframe 运行在独立内容域 `games.gamedock.cn`,平台层不做联机。部署在 Cloudflare Workers(D1 存用户/好友/聊天,KV 存玩家存档,R2 存游戏静态资源)。
 
 ## 文档
 

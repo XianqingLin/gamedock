@@ -1,17 +1,16 @@
-import { findUserByUsername } from './auth.mjs';
-
 /**
  * 好友关系逻辑(存储接口见 store.mjs)。
  * 记录:{ id, users:[aId,bId](升序), status:'pending'|'accepted', requestedBy, createdAt, respondedAt? }
  */
+import { AI_ASSISTANT } from './chat.mjs';
 
 const fail = (error) => ({ ok: false, error });
 
-export async function sendFriendRequest(store, userId, targetUsername) {
-  if (typeof targetUsername !== 'string' || !targetUsername.trim()) {
-    return fail('请输入要添加的用户名');
+export async function sendFriendRequest(store, userId, targetId) {
+  if (typeof targetId !== 'string' || !targetId.trim()) {
+    return fail('请输入要添加的用户 ID');
   }
-  const target = await findUserByUsername(store, targetUsername);
+  const target = await store.getUserById(targetId.trim());
   if (!target) return fail('找不到该用户');
   if (target.id === userId) return fail('不能添加自己为好友');
 
@@ -69,10 +68,17 @@ export async function removeFriend(store, userId, friendshipId) {
   return { ok: true };
 }
 
-/** 列表:已确认好友、收到待处理、发出待处理。 */
+/** 列表:固定 AI 助手 + 已确认好友、收到待处理、发出待处理。 */
 export async function listFriends(store, userId) {
   const records = await store.listFriendshipsFor(userId);
-  const friends = [];
+  const friends = [
+    {
+      id: AI_ASSISTANT.id,
+      user: { id: AI_ASSISTANT.id, username: AI_ASSISTANT.username },
+      since: '',
+      assistant: true,
+    },
+  ];
   const incoming = [];
   const outgoing = [];
 

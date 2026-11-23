@@ -6,8 +6,14 @@
 
 - 前端:Vite + React + TypeScript + React Router,普通 CSS;测试用 Vitest + React Testing Library。
 - 后端:Cloudflare Workers(`server/worker.mjs` + `wrangler.jsonc`),业务模块面向存储接口编程。
-- 存储:D1(用户/好友)、KV(玩家存档)、R2(游戏静态资源,bucket `gamedock-games`)。
+- 存储(2026-11-23):D1(用户/好友/聊天消息)、KV(玩家存档)、R2(游戏静态资源,bucket `gamedock-games`)。
 - 本地开发:`wrangler dev`(本地模拟 D1/KV/R2)+ vite 代理;测试向业务模块注入内存/fs 实现。
+
+AI 助手聊天(2026-11-23,仅 AI 助手,好友间聊天不在范围):
+
+- AI 回复走与厂商无关的通用 API:OpenAI 兼容的 `POST {AI_API_BASE_URL}/chat/completions`(Bearer 认证);Base URL 与模型名用 vars(`AI_API_BASE_URL`/`AI_API_MODEL`),密钥用 secret(`AI_API_KEY`,不入库)。未配置或调用失败时向用户明确报错,不伪造回复。
+- 聊天消息存 D1 `chat_messages`(按用户隔离,peer 当前固定为 `ai-xiaozhou`);历史返回最多 100 条,送 AI 最近 20 条 + 系统提示词;单条消息 ≤2000 字。
+- 平台不做联机的边界不变:聊天是平台社交功能,不是游戏内联机通道。
 
 不为简单功能提前搭无关后端,不引入只解决假想需求的大型依赖,不加无实际作用的抽象层。
 
@@ -68,7 +74,7 @@
 测试至少覆盖:
 
 - 搜索与分类组合筛选、专题筛选、排序方式、空结果与清除筛选、按 slug 查找、启动四态、外链协议校验与危险协议拦截、筛选排除选中项的清理、缺省封面回退。
-- 注册/登录/登出/me 全流程(含错误密码、重复注册、会话伪造拒绝);好友全流程及无效操作;存档写读列删、slug 校验、大小上限、未登录拒绝。
+- 注册/登录/登出/me 全流程(含错误密码、重复注册、会话伪造拒绝);好友全流程及无效操作(含 AI 助手固定、按 ID 搜索、同意流);聊天历史/发送/未登录拒绝/peer 校验/AI 未配置与调用失败;存档写读列删、slug 校验、大小上限、未登录拒绝。
 - CORS:内容域放行(含 preflight)、自身源放行、第三方源拒绝。
 - R2 静态资源服务:目录回退、Content-Type 推断、缓存策略、Range、路径穿越、未命中 404。
 - Worker 路由分流:游戏域、主域重定向、本地 dev 直读、SPA 回退。

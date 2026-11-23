@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { friendsApi } from '../lib/api';
-import type { FriendLists } from '../lib/api';
+import type { FriendEntry, FriendLists } from '../lib/api';
 import { useAuth } from '../state/auth';
+import { ChatBox } from './ChatBox';
+import { Modal } from './Modal';
 
 /**
- * 好友面板(仅好友关系,无在线状态;邀请后续在统一社交面板扩展)。
+ * 好友面板(仅好友关系,无在线状态)。
+ * 固定 AI 助手「小舟AI」永远在好友列表首位,不可删除,点击打开聊天框;
+ * 添加好友通过对方用户 ID 搜索,需对方同意。
  * 所有操作失败都以服务端错误文案展示,不假装成功。
  */
 export function FriendsPanel() {
@@ -13,6 +17,7 @@ export function FriendsPanel() {
   const [input, setInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [chatPeer, setChatPeer] = useState<{ id: string; name: string } | null>(null);
 
   const apply = useCallback(async (action: () => Promise<FriendLists>) => {
     setActionError(null);
@@ -29,12 +34,15 @@ export function FriendsPanel() {
   useEffect(() => {
     setLists(null);
     setActionError(null);
+    setChatPeer(null);
     if (status === 'user') void apply(() => friendsApi.list());
   }, [apply, status, user?.id]);
 
   if (status !== 'user') {
-    return <p className="friends-empty">登录后即可查看好友和处理好友请求。</p>;
+    return <p className="friends-empty">登录或注册后才能使用好友功能。</p>;
   }
+
+  const humanFriends = lists?.friends.filter((entry) => !entry.assistant) ?? [];
 
   return (
     <div className="friends-panel">
@@ -43,7 +51,7 @@ export function FriendsPanel() {
         onSubmit={(event) => {
           event.preventDefault();
           if (!input.trim()) return;
-          const target = input;
+          const target = input.trim();
           setInput('');
           void apply(() => friendsApi.sendRequest(target));
         }}
@@ -52,9 +60,9 @@ export function FriendsPanel() {
           type="text"
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="输入用户名添加好友"
-          aria-label="输入用户名添加好友"
-          maxLength={24}
+          placeholder="输入对方用户 ID 添加好友"
+          aria-label="输入对方用户 ID 添加好友"
+          maxLength={64}
         />
         <button type="submit" className="btn btn-secondary" disabled={busy || !input.trim()}>
           发送请求
@@ -70,26 +78,20 @@ export function FriendsPanel() {
 
       {lists && (
         <>
-          {lists.friends.length > 0 && (
-            <section>
-              <h3 className="friends-section-title">我的好友</h3>
-              <ul className="friends-list">
-                {lists.friends.map((entry) => (
-                  <li key={entry.id} className="friend-row">
-                    <span>{entry.user.username}</span>
-                    <button
-                      type="button"
-                      className="btn-link"
-                      disabled={busy}
-                      onClick={() => void apply(() => friendsApi.remove(entry.id))}
-                    >
-                      删除
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <section>
+            <h3 className="friends-section-title">我的好友</h3>
+            <ul className="friends-list">
+              {lists.friends.map((entry) => (
+                <FriendRow
+                  key={entry.id}
+                  entry={entry}
+                  busy={busy}
+                  onOpenChat={setChatPeer}
+                  onRemove={() => void apply(() => friendsApi.remove(entry.id))}
+                />
+              ))}
+            </ul>
+          </section>
 
           {lists.incoming.length > 0 && (
             <section>
@@ -143,11 +145,52 @@ export function FriendsPanel() {
             </section>
           )}
 
-          {lists.friends.length === 0 && lists.incoming.length === 0 && lists.outgoing.length === 0 && (
-            <p className="friends-empty">还没有好友。通过上面的输入框发送好友请求吧。</p>
+          {humanFriends.length === 0 && lists.incoming.length === 0 && lists.outgoing.length === 0 && (
+            <p className="friends-empty">还没有其他好友,通过上面的输入框发送好友请求吧。</p>
           )}
         </>
       )}
+
+      {chatPeer && (
+        <Modal
+          title={chatPeer.name}
+          overlayClass="chat-overlay"
+          onClose={() => setChatPeer(null)}
+        >
+          <ChatBox peerId={chatPeer.id} peerName={chatPeer.name} />
+        </Modal>
+      )}
     </div>
+  );
+}
+
+interface FriendRowProps {
+  entry: FriendEntry;
+  busy: boolean;
+  onOpenChat: (peer: { id: string; name: string }) => void;
+  onRemove: () => void;
+}
+
+function FriendRow({ entry, busy, onOpenChat, onRemove }: FriendRowProps) {
+  if (entry.assistant) {
+    return (
+      <li className="friend-row">
+        <button
+          type="button"
+          className="friend-open"
+          onClick={() => onOpenChat({ id: entry.user.id, name: entry.user.username })}
+        >
+          {entry.user.username}
+        </button>
+      </li>
+    );
+  }
+  return (
+    <li className="friend-row">
+      <span>{entry.user.username}</span>
+      <button type="button" className="btn-link" disabled={busy} onClick={onRemove}>
+        删除
+      </button>
+    </li>
   );
 }

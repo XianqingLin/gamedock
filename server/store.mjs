@@ -11,14 +11,17 @@
  * - insertFriendship(record)
  * - updateFriendship(id, patch)   // { status?, respondedAt? }
  * - deleteFriendship(id)
+ * - insertChatMessage(record)
+ * - listChatMessages(userId, peerId, limit) → [record](时间正序,最近 limit 条)
  *
  * user 形状:{ id, username, passSalt, passHash, createdAt }
  * friendship 形状:{ id, users:[aId,bId](升序), status:'pending'|'accepted', requestedBy, createdAt, respondedAt? }
+ * chatMessage 形状:{ id, userId, peerId, role:'user'|'assistant', content, createdAt }
  *
  * 本文件提供内存实现:测试与纯内存场景用;线上见 store-d1.mjs(D1)。
  */
 export function createMemoryStore() {
-  const db = { users: [], friendships: [] };
+  const db = { users: [], friendships: [], chatMessages: [] };
 
   return {
     /** 测试用:直接查看底层数据。 */
@@ -62,6 +65,15 @@ export function createMemoryStore() {
     async deleteFriendship(id) {
       const index = db.friendships.findIndex((r) => r.id === id);
       if (index !== -1) db.friendships.splice(index, 1);
+    },
+
+    async insertChatMessage(record) {
+      db.chatMessages.push(record);
+    },
+
+    async listChatMessages(userId, peerId, limit) {
+      const rows = db.chatMessages.filter((m) => m.userId === userId && m.peerId === peerId);
+      return rows.slice(-limit);
     },
   };
 }

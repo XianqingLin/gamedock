@@ -27,6 +27,18 @@ function friendshipFromRow(row) {
   };
 }
 
+function chatMessageFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    peerId: row.peer_id,
+    role: row.role,
+    content: row.content,
+    createdAt: row.created_at,
+  };
+}
+
 export function createD1Store(d1) {
   return {
     async getUserById(id) {
@@ -95,6 +107,25 @@ export function createD1Store(d1) {
 
     async deleteFriendship(id) {
       await d1.prepare('DELETE FROM friendships WHERE id = ?').bind(id).run();
+    },
+
+    async insertChatMessage(record) {
+      await d1
+        .prepare(
+          'INSERT INTO chat_messages (id, user_id, peer_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .bind(record.id, record.userId, record.peerId, record.role, record.content, record.createdAt)
+        .run();
+    },
+
+    async listChatMessages(userId, peerId, limit) {
+      const { results } = await d1
+        .prepare(
+          'SELECT * FROM chat_messages WHERE user_id = ? AND peer_id = ? ORDER BY rowid DESC LIMIT ?',
+        )
+        .bind(userId, peerId, limit)
+        .all();
+      return results.reverse().map(chatMessageFromRow);
     },
   };
 }

@@ -462,18 +462,6 @@ input {
   white-space: nowrap;
 }
 
-.user-menu-chevron {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  color: var(--muted);
-  transition: transform 150ms ease;
-}
-
-.user-menu-chevron.is-open {
-  transform: rotate(180deg);
-}
-
 .user-dropdown {
   position: absolute;
   top: calc(100% + 8px);
@@ -1617,6 +1605,93 @@ input {
   font-size: 13px;
 }
 
+/* AI 助手行:外观与普通好友行一致,整行可点击打开聊天框。 */
+.friend-open {
+  flex: 1;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.friend-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---------- 聊天框(叠加在好友抽屉之上) ---------- */
+
+.chat-overlay {
+  z-index: 120;
+}
+
+.chat-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 280px;
+}
+
+.chat-messages {
+  flex: 1;
+  min-height: 220px;
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px;
+}
+
+.chat-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.chat-message {
+  max-width: 82%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.chat-message p {
+  margin: 0;
+}
+
+.chat-message-user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chat-message-assistant {
+  align-self: flex-start;
+  background: #242429;
+  color: #e6e6ea;
+}
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-input .btn {
+  flex-shrink: 0;
+}
+
 /* ---------- 个人主页 ---------- */
 
 .profile-main {
@@ -1684,6 +1759,17 @@ input {
   color: #d5d5d9;
   font-size: 13px;
   text-align: right;
+}
+
+.profile-user-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-user-id code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- 空状态 ---------- */

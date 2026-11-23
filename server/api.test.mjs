@@ -107,8 +107,9 @@ describe('好友 HTTP 流程', () => {
     const b = makeClient();
     await a.request('POST', '/api/auth/register', { username: 'alice2', password: 'secret66' });
     await b.request('POST', '/api/auth/register', { username: 'bob2', password: 'secret66' });
+    const bobId = (await b.request('GET', '/api/auth/me')).data.user.id;
 
-    const sent = await a.request('POST', '/api/friends/requests', { username: 'bob2' });
+    const sent = await a.request('POST', '/api/friends/requests', { id: bobId });
     expect(sent.status).toBe(200);
     expect(sent.data.outgoing).toHaveLength(1);
 
@@ -118,15 +119,15 @@ describe('好友 HTTP 流程', () => {
 
     const accepted = await b.request('POST', `/api/friends/requests/${requestId}/accept`);
     expect(accepted.status).toBe(200);
-    expect(accepted.data.friends.map((f) => f.user.username)).toEqual(['alice2']);
+    expect(accepted.data.friends.filter((f) => !f.assistant).map((f) => f.user.username)).toEqual(['alice2']);
 
     const mine = await a.request('GET', '/api/friends');
-    expect(mine.data.friends.map((f) => f.user.username)).toEqual(['bob2']);
+    expect(mine.data.friends.filter((f) => !f.assistant).map((f) => f.user.username)).toEqual(['bob2']);
 
-    const friendshipId = mine.data.friends[0].id;
+    const friendshipId = mine.data.friends.find((f) => !f.assistant).id;
     const removed = await a.request('DELETE', `/api/friends/${friendshipId}`);
     expect(removed.status).toBe(200);
-    expect(removed.data.friends).toHaveLength(0);
+    expect(removed.data.friends.filter((f) => !f.assistant)).toHaveLength(0);
   });
 
   it('拒绝请求与取消请求', async () => {
@@ -134,14 +135,15 @@ describe('好友 HTTP 流程', () => {
     const b = makeClient();
     await a.request('POST', '/api/auth/register', { username: 'alice3', password: 'secret66' });
     await b.request('POST', '/api/auth/register', { username: 'bob3', password: 'secret66' });
+    const bob3Id = (await b.request('GET', '/api/auth/me')).data.user.id;
 
-    await a.request('POST', '/api/friends/requests', { username: 'bob3' });
+    await a.request('POST', '/api/friends/requests', { id: bob3Id });
     const requestId = (await b.request('GET', '/api/friends')).data.incoming[0].id;
     const declined = await b.request('POST', `/api/friends/requests/${requestId}/decline`);
     expect(declined.status).toBe(200);
-    expect(declined.data.friends).toHaveLength(0);
+    expect(declined.data.friends.filter((f) => !f.assistant)).toHaveLength(0);
 
-    await a.request('POST', '/api/friends/requests', { username: 'bob3' });
+    await a.request('POST', '/api/friends/requests', { id: bob3Id });
     const outgoingId = (await a.request('GET', '/api/friends')).data.outgoing[0].id;
     const cancelled = await a.request('DELETE', `/api/friends/requests/${outgoingId}`);
     expect(cancelled.status).toBe(200);

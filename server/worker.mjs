@@ -84,6 +84,12 @@ export default {
       gameSlugs,
       gamesData,
       gameOrigin: `https://${GAME_HOST}`,
+      // AI 助手(小舟AI)通用 API 配置:Base URL / 模型名用 vars,密钥用 secret。
+      ai: {
+        baseUrl: env.AI_API_BASE_URL,
+        apiKey: env.AI_API_KEY,
+        model: env.AI_API_MODEL,
+      },
     };
 
     try {

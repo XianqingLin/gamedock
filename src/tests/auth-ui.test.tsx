@@ -4,12 +4,20 @@ import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
 
 /**
- * 内存版假后端:完整模拟注册/登录/登出/好友接口的响应语义(含错误文案),
+ * 内存版假后端:完整模拟注册/登录/登出/好友/聊天接口的响应语义(含错误文案),
  * 用于驱动真实 UI 组件的集成测试。
  */
 function makeFakeApi() {
   const users = new Map<string, { id: string; username: string; createdAt: string; password: string }>();
   const friendships: { id: string; a: string; b: string; status: 'pending' | 'accepted'; requestedBy: string }[] = [];
+  const chatHistory: {
+    id: string;
+    userId: string;
+    peer: string;
+    role: 'user' | 'assistant';
+    content: string;
+    createdAt: string;
+  }[] = [];
   let currentUserId: string | null = null;
   let seq = 0;
 
@@ -19,7 +27,9 @@ function makeFakeApi() {
     return { id: u.id, username: u.username, createdAt: u.createdAt };
   };
   const lists = () => {
-    const friends: unknown[] = [];
+    const friends: unknown[] = [
+      { id: 'ai-xiaozhou', user: { id: 'ai-xiaozhou', username: '小舟AI' }, since: '', assistant: true },
+    ];
     const incoming: unknown[] = [];
     const outgoing: unknown[] = [];
     for (const r of friendships) {
@@ -89,7 +99,7 @@ function makeFakeApi() {
       }
       if (path === '/api/friends' && method === 'GET') return json(lists());
       if (path === '/api/friends/requests' && method === 'POST') {
-        const target = users.get(String(body.username ?? '').toLowerCase());
+        const target = [...users.values()].find((u) => u.id === body.id);
         if (!target) return json({ error: '找不到该用户' }, 400);
         if (target.id === currentUserId) return json({ error: '不能添加自己为好友' }, 400);
         friendships.push({
@@ -100,6 +110,34 @@ function makeFakeApi() {
           requestedBy: currentUserId!,
         });
         return json(lists());
+      }
+      if (/^\/api\/chat\/[\w-]+$/.test(path)) {
+        if (!currentUserId) return json({ error: '需要登录' }, 401);
+        if (path !== '/api/chat/ai-xiaozhou') return json({ error: '会话不存在' }, 404);
+        const mine = chatHistory.filter((m) => m.userId === currentUserId);
+        if (method === 'GET') return json({ messages: mine });
+        if (method === 'POST') {
+          const content = String(body.content ?? '').trim();
+          if (!content) return json({ error: '消息不能为空' }, 400);
+          const userMessage = {
+            id: `m${++seq}`,
+            userId: currentUserId,
+            peer: 'ai-xiaozhou',
+            role: 'user' as const,
+            content,
+            createdAt: '2026-11-23T00:00:00Z',
+          };
+          const assistantMessage = {
+            id: `m${++seq}`,
+            userId: currentUserId,
+            peer: 'ai-xiaozhou',
+            role: 'assistant' as const,
+            content: `好的,收到:「${content}」`,
+            createdAt: '2026-11-23T00:00:00Z',
+          };
+          chatHistory.push(userMessage, assistantMessage);
+          return json({ messages: [userMessage, assistantMessage] });
+        }
       }
       const respond = /\/api\/friends\/requests\/([\w-]+)\/(accept|decline)$/.exec(path);
       if (respond && method === 'POST') {
@@ -224,17 +262,24 @@ describe('游客身份', () => {
 });
 
 describe('好友面板', () => {
-  it('已登录用户可以发送好友请求', async () => {
+  it('未登录时在面板内提示先登录或注册', async () => {
+    renderApp();
+    openFriendsPanel();
+    expect(await screen.findByText('登录或注册后才能使用好友功能。')).toBeInTheDocument();
+  });
+
+  it('已登录用户可以按用户 ID 发送好友请求', async () => {
     fake.addUser('bob');
+    const bobId = fake.users.get('bob')!.id;
     renderApp();
     await registerViaUi('alice', 'secret66');
     await screen.findByText('alice');
     openFriendsPanel();
 
     // 等待面板初始加载完成,避免提交按钮仍处于 busy 禁用状态
-    await screen.findByText('还没有好友。通过上面的输入框发送好友请求吧。');
-    fireEvent.change(screen.getByRole('textbox', { name: '输入用户名添加好友' }), {
-      target: { value: 'bob' },
+    await screen.findByText('还没有其他好友,通过上面的输入框发送好友请求吧。');
+    fireEvent.change(screen.getByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
+      target: { value: bobId },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送请求' }));
 
@@ -242,18 +287,39 @@ describe('好友面板', () => {
     expect(screen.getByText('bob')).toBeInTheDocument();
   });
 
-  it('发送请求失败显示服务端错误', async () => {
+  it('好友列表固定包含不可删除的 AI 助手,发送请求失败显示服务端错误', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
     await screen.findByText('alice');
     openFriendsPanel();
 
-    await screen.findByText('还没有好友。通过上面的输入框发送好友请求吧。');
-    fireEvent.change(screen.getByRole('textbox', { name: '输入用户名添加好友' }), {
+    await screen.findByText('小舟AI');
+    // AI 助手不可删除:列表里唯一的「删除」按钮数量等于人类好友数量(0)。
+    expect(screen.queryByRole('button', { name: '删除' })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
       target: { value: 'ghost' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送请求' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('找不到该用户');
+  });
+
+  it('点击 AI 助手弹出聊天框,发送消息并收到回复', async () => {
+    renderApp();
+    await registerViaUi('alice', 'secret66');
+    await screen.findByText('alice');
+    openFriendsPanel();
+
+    fireEvent.click(await screen.findByRole('button', { name: '小舟AI' }));
+    const chatDialog = await screen.findByRole('dialog', { name: '小舟AI' });
+    expect(chatDialog).toBeVisible();
+
+    fireEvent.change(within(chatDialog).getByLabelText('发消息给小舟AI'), {
+      target: { value: '你好' },
+    });
+    fireEvent.click(within(chatDialog).getByRole('button', { name: '发送' }));
+
+    expect(await within(chatDialog).findByText('好的,收到:「你好」')).toBeInTheDocument();
   });
 
   it('收到的好友请求可以接受', async () => {
