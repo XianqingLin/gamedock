@@ -1430,6 +1430,9 @@ input {
   flex-direction: column;
   overflow: hidden;
   padding: 0;
+  border-radius: 12px;
+  background: #1c1c1e;
+  border-color: rgba(84, 84, 88, 0.4);
 }
 
 .social-drawer .modal-header {
@@ -1545,31 +1548,222 @@ input {
   cursor: not-allowed;
 }
 
-/* ---------- 好友面板 ---------- */
+/* ---------- 好友面板(苹果风) ---------- */
 
 .friends-panel {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 14px;
+}
+
+.friends-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.friends-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.friends-toolbar-spacer {
+  flex: 1;
+}
+
+.friend-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.friend-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.friend-icon-btn:hover {
+  background: #333338;
+}
+
+.friend-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.friend-icon-btn[aria-expanded='true'] {
+  background: #3a3a3f;
+}
+
+.friend-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ff453a;
+  color: #fff;
+  font-size: 10px;
+  line-height: 15px;
+  text-align: center;
+}
+
+/* 搜索:点击图标后图标行变为居中展开的搜索框。 */
+.friends-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform-origin: center;
+  animation: search-reveal 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.friends-search input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-hover);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.friends-search input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(235, 235, 245, 0.28);
+}
+
+@keyframes search-reveal {
+  from {
+    transform: scaleX(0.35);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* 下滑面板(好友请求 / 添加好友):grid-rows 过渡实现双向滑动。 */
+.friends-slide {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.friends-slide.is-open {
+  grid-template-rows: 1fr;
+}
+
+.friends-slide-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.friends-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .friends-add {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .friends-add input {
   flex: 1;
   min-width: 0;
-  border-radius: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-hover);
+  color: var(--ink);
+  font-size: 14px;
 }
 
-.friends-add .btn {
+.friends-add input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(235, 235, 245, 0.28);
+}
+
+/* ✓ / ✗ / 发送:圆形动作钮。 */
+.friend-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
   flex-shrink: 0;
 }
 
+.friend-action-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.friend-action-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.friend-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.friend-action-accept {
+  background: rgba(48, 209, 88, 0.18);
+  color: #30d158;
+}
+
+.friend-action-accept:hover:not(:disabled) {
+  background: rgba(48, 209, 88, 0.3);
+}
+
+.friend-action-decline {
+  background: rgba(255, 69, 58, 0.16);
+  color: #ff6961;
+}
+
+.friend-action-decline:hover:not(:disabled) {
+  background: rgba(255, 69, 58, 0.28);
+}
+
+.friend-pending {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.friends-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .friends-section-title {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
@@ -1585,14 +1779,49 @@ input {
   gap: 2px;
 }
 
+.friend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 4px 10px;
+  margin: 0 -10px;
+  border-radius: 10px;
+}
+
+.friend-item:hover {
+  background: var(--surface-hover);
+}
+
+.friend-item-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.friend-item-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .friend-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 44px;
-  padding: 0 8px;
-  margin: 0 -8px;
-  border-radius: 6px;
+  min-height: 48px;
+  padding: 2px 10px;
+  margin: 0 -10px;
+  border-radius: 10px;
   font-size: 14px;
 }
 
@@ -1604,25 +1833,62 @@ input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 30px;
   height: 30px;
-  flex-shrink: 0;
   border-radius: 50%;
-  background: #2b2b30;
+  background: #2c2c2e;
   color: #c8c8ce;
   font-size: 13px;
 }
 
-.friend-name {
+.friend-avatar-lg {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.friend-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 1;
   min-width: 0;
+}
+
+.friend-name {
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.friend-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-online {
+  background: #30d158;
+}
+
+.status-offline {
+  background: #6e6e73;
+}
+
 .friend-row-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -1631,28 +1897,6 @@ input {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
-}
-
-/* AI 助手行:外观与普通好友行一致,整行可点击打开聊天框。 */
-.friend-open {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 6px;
-}
-
-.friend-open:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* ---------- 聊天框(叠加在好友抽屉之上) ---------- */

@@ -12,6 +12,7 @@ function userFromRow(row) {
     passSalt: row.pass_salt,
     passHash: row.pass_hash,
     createdAt: row.created_at,
+    lastSeenAt: row.last_seen_at ?? undefined,
   };
 }
 
@@ -126,6 +127,10 @@ export function createD1Store(d1) {
         .bind(userId, peerId, limit)
         .all();
       return results.reverse().map(chatMessageFromRow);
+    },
+
+    async updateLastSeen(userId, isoTime) {
+      await d1.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').bind(isoTime, userId).run();
     },
   };
 }

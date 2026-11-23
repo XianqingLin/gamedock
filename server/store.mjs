@@ -13,8 +13,9 @@
  * - deleteFriendship(id)
  * - insertChatMessage(record)
  * - listChatMessages(userId, peerId, limit) → [record](时间正序,最近 limit 条)
+ * - updateLastSeen(userId, isoTime)
  *
- * user 形状:{ id, username, passSalt, passHash, createdAt }
+ * user 形状:{ id, username, passSalt, passHash, createdAt, lastSeenAt? }
  * friendship 形状:{ id, users:[aId,bId](升序), status:'pending'|'accepted', requestedBy, createdAt, respondedAt? }
  * chatMessage 形状:{ id, userId, peerId, role:'user'|'assistant', content, createdAt }
  *
@@ -74,6 +75,11 @@ export function createMemoryStore() {
     async listChatMessages(userId, peerId, limit) {
       const rows = db.chatMessages.filter((m) => m.userId === userId && m.peerId === peerId);
       return rows.slice(-limit);
+    },
+
+    async updateLastSeen(userId, isoTime) {
+      const user = db.users.find((u) => u.id === userId);
+      if (user) user.lastSeenAt = isoTime;
     },
   };
 }

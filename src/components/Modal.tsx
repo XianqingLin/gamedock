@@ -8,6 +8,8 @@ interface ModalProps {
   variant?: 'dialog' | 'drawer';
   /** 追加到遮罩层上的类名(如聊天框叠在好友抽屉之上时抬高 z-index)。 */
   overlayClass?: string;
+  /** 隐藏默认头部(标题 + 关闭钮),由内容自绘工具栏(好友面板的苹果风工具行)。 */
+  hideHeader?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -20,7 +22,7 @@ const modalStack: symbol[] = [];
  * 通用模态弹层:焦点移入并圈定在弹层内,Escape 关闭,
  * 关闭后焦点恢复到原入口(产品需求 6.2)。
  */
-export function Modal({ title, onClose, children, variant = 'dialog', overlayClass }: ModalProps) {
+export function Modal({ title, onClose, children, variant = 'dialog', overlayClass, hideHeader }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const tokenRef = useRef<symbol | null>(null);
@@ -89,12 +91,14 @@ export function Modal({ title, onClose, children, variant = 'dialog', overlayCla
         aria-label={title}
         ref={dialogRef}
       >
-        <header className="modal-header">
-          <h2 className="modal-title">{title}</h2>
-          <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="关闭弹窗">
-            ✕
-          </button>
-        </header>
+        {hideHeader ? null : (
+          <header className="modal-header">
+            <h2 className="modal-title">{title}</h2>
+            <button type="button" className="btn btn-ghost" onClick={onClose} aria-label="关闭弹窗">
+              ✕
+            </button>
+          </header>
+        )}
         {children}
       </div>
     </div>

@@ -6,6 +6,17 @@ import { AI_ASSISTANT } from './chat.mjs';
 
 const fail = (error) => ({ ok: false, error });
 
+/**
+ * 在线判定:轻量心跳来源(前端登录后周期性 POST /api/presence),
+ * 最近 ONLINE_WINDOW_MS 内有心跳视为在线;无真实来源不编造在线状态。
+ */
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+export function isOnline(lastSeenAt) {
+  if (!lastSeenAt) return false;
+  const time = Date.parse(lastSeenAt);
+  return Number.isFinite(time) && Date.now() - time < ONLINE_WINDOW_MS;
+}
+
 export async function sendFriendRequest(store, userId, targetId) {
   if (typeof targetId !== 'string' || !targetId.trim()) {
     return fail('请输入要添加的用户 ID');
@@ -74,7 +85,7 @@ export async function listFriends(store, userId) {
   const friends = [
     {
       id: AI_ASSISTANT.id,
-      user: { id: AI_ASSISTANT.id, username: AI_ASSISTANT.username },
+      user: { id: AI_ASSISTANT.id, username: AI_ASSISTANT.username, online: true },
       since: '',
       assistant: true,
     },
@@ -85,7 +96,11 @@ export async function listFriends(store, userId) {
   for (const record of records) {
     const otherId = record.users[0] === userId ? record.users[1] : record.users[0];
     const otherUser = await store.getUserById(otherId);
-    const other = { id: otherId, username: otherUser?.username ?? '(已注销)' };
+    const other = {
+      id: otherId,
+      username: otherUser?.username ?? '(已注销)',
+      online: isOnline(otherUser?.lastSeenAt),
+    };
     if (record.status === 'accepted') {
       friends.push({ id: record.id, user: other, since: record.respondedAt ?? record.createdAt });
     } else if (record.requestedBy === userId) {

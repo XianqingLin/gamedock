@@ -6,7 +6,7 @@ export interface ApiUser {
 
 export interface FriendEntry {
   id: string;
-  user: Pick<ApiUser, 'id' | 'username'>;
+  user: Pick<ApiUser, 'id' | 'username'> & { online?: boolean };
   since: string;
   /** 固定 AI 助手(不可删除,点击打开聊天)。 */
   assistant?: boolean;
@@ -14,13 +14,13 @@ export interface FriendEntry {
 
 export interface IncomingRequestEntry {
   id: string;
-  from: Pick<ApiUser, 'id' | 'username'>;
+  from: Pick<ApiUser, 'id' | 'username'> & { online?: boolean };
   createdAt: string;
 }
 
 export interface OutgoingRequestEntry {
   id: string;
-  to: Pick<ApiUser, 'id' | 'username'>;
+  to: Pick<ApiUser, 'id' | 'username'> & { online?: boolean };
   createdAt: string;
 }
 
@@ -68,6 +68,11 @@ export const authApi = {
   login: (username: string, password: string) =>
     apiRequest<{ user: ApiUser }>('/api/auth/login', { method: 'POST', body: { username, password } }),
   logout: () => apiRequest<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
+};
+
+export const presenceApi = {
+  /** 登录态在线心跳:服务端记录 last_seen_at,好友列表据此判定在线(静默失败,不影响使用)。 */
+  beat: () => apiRequest<{ ok: true }>('/api/presence', { method: 'POST' }),
 };
 
 export const friendsApi = {

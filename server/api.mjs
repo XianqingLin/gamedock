@@ -89,6 +89,15 @@ async function routeApi(request, env) {
     return sendJson(200, env.gamesData);
   }
 
+  if (pathname === '/api/presence' && method === 'POST') {
+    // 在线心跳:登录态浏览器周期性调用,服务端记录 last_seen_at 供好友列表判定在线。
+    const user = await requireAuth(ctx);
+    if (!user) return ctx.response;
+    await env.store.updateLastSeen(user.id, new Date().toISOString());
+    ctx.response = sendJson(200, { ok: true });
+    return ctx.response;
+  }
+
   if (await handleAuthApi(ctx, pathname)) return ctx.response;
   if (await handleFriendsApi(ctx, pathname)) return ctx.response;
   if (await handleChatApi(ctx, pathname)) return ctx.response;

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
-import { AuthProvider } from './state/auth';
+import { AuthProvider, useAuth } from './state/auth';
+import { presenceApi } from './lib/api';
 import { ExplorePage } from './pages/ExplorePage';
 import { BrowsePage } from './pages/BrowsePage';
 import { GameDetailPage } from './pages/GameDetailPage';
@@ -9,6 +10,32 @@ import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AppSidebar } from './components/AppSidebar';
 import { trackNavigation } from './lib/navStack';
+
+/**
+ * 在线心跳:登录后周期性上报(页面可见时),好友列表据此判定在线;
+ * 静默失败,不影响任何功能。
+ */
+function PresenceHeartbeat() {
+  const { status } = useAuth();
+
+  useEffect(() => {
+    if (status !== 'user') return;
+    let stopped = false;
+    const beat = () => {
+      if (!stopped && document.visibilityState === 'visible') {
+        void presenceApi.beat().catch(() => {});
+      }
+    };
+    beat();
+    const timer = window.setInterval(beat, 60_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [status]);
+
+  return null;
+}
 
 export default function App() {
   const location = useLocation();
@@ -22,6 +49,7 @@ export default function App() {
 
   return (
     <AuthProvider>
+      <PresenceHeartbeat />
       <div className="app-shell">
         {showSidebar && <AppSidebar />}
         <div className="app-content">

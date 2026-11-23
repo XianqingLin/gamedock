@@ -6,18 +6,23 @@ import { ChatBox } from './ChatBox';
 import { Modal } from './Modal';
 
 /**
- * 好友面板(仅好友关系,无在线状态)。
+ * 好友面板(苹果风):顶栏三个圆形图标钮(搜索/好友请求/添加好友),
+ * 搜索点击后图标行变为居中展开的搜索框;请求与添加以下滑面板呈现。
  * 固定 AI 助手「小舟AI」永远在好友列表首位,不可删除,点击打开聊天框;
- * 添加好友通过对方用户 ID 搜索,需对方同意。
+ * 添加好友通过对方用户 ID 搜索,需对方同意;在线状态来自真实心跳(/api/presence)。
  * 所有操作失败都以服务端错误文案展示,不假装成功。
  */
-export function FriendsPanel() {
+export function FriendsPanel({ onClose }: { onClose: () => void }) {
   const { status, user } = useAuth();
   const [lists, setLists] = useState<FriendLists | null>(null);
   const [input, setInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [chatPeer, setChatPeer] = useState<{ id: string; name: string } | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [query, setQuery] = useState('');
 
   const apply = useCallback(async (action: () => Promise<FriendLists>) => {
     setActionError(null);
@@ -35,37 +40,195 @@ export function FriendsPanel() {
     setLists(null);
     setActionError(null);
     setChatPeer(null);
+    setSearchOpen(false);
+    setRequestsOpen(false);
+    setAddOpen(false);
+    setQuery('');
     if (status === 'user') void apply(() => friendsApi.list());
   }, [apply, status, user?.id]);
 
   if (status !== 'user') {
-    return <p className="friends-empty">登录或注册后才能使用好友功能。</p>;
+    return (
+      <div className="friends-panel">
+        <header className="friends-toolbar">
+          <span className="friends-toolbar-spacer" aria-hidden="true" />
+          <button type="button" className="friend-icon-btn" aria-label="关闭弹窗" onClick={onClose}>
+            <IconClose />
+          </button>
+        </header>
+        <p className="friends-empty">登录或注册后才能使用好友功能。</p>
+      </div>
+    );
   }
+
+  // 三个工具互斥:搜索/请求/添加同一时间只展开一个。
+  const openSearch = () => {
+    setSearchOpen(true);
+    setRequestsOpen(false);
+    setAddOpen(false);
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery('');
+  };
+  const toggleRequests = () => {
+    setRequestsOpen((open) => !open);
+    setSearchOpen(false);
+    setAddOpen(false);
+  };
+  const toggleAdd = () => {
+    setAddOpen((open) => !open);
+    setSearchOpen(false);
+    setRequestsOpen(false);
+  };
+
+  const keyword = query.trim().toLowerCase();
+  const visibleFriends = lists?.friends.filter(
+    (entry) => !keyword || entry.user.username.toLowerCase().includes(keyword),
+  );
+
+  const submitAdd = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!input.trim() || busy) return;
+    const target = input.trim();
+    setInput('');
+    // 面板立即切换,请求结果在请求面板中呈现(成功 → 已发出的请求;失败 → 错误文案)。
+    setAddOpen(false);
+    setRequestsOpen(true);
+    void apply(() => friendsApi.sendRequest(target));
+  };
 
   return (
     <div className="friends-panel">
-      <form
-        className="friends-add"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!input.trim()) return;
-          const target = input.trim();
-          setInput('');
-          void apply(() => friendsApi.sendRequest(target));
-        }}
-      >
-        <input
-          type="text"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="输入对方用户 ID 添加好友"
-          aria-label="输入对方用户 ID 添加好友"
-          maxLength={64}
-        />
-        <button type="submit" className="btn btn-secondary" disabled={busy || !input.trim()}>
-          发送请求
+      <header className="friends-toolbar">
+        {searchOpen ? (
+          <form className="friends-search" onSubmit={(event) => event.preventDefault()}>
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索好友"
+              aria-label="搜索好友"
+              maxLength={24}
+              autoFocus
+            />
+            <button type="button" className="friend-icon-btn" aria-label="退出搜索" onClick={closeSearch}>
+              <IconClose />
+            </button>
+          </form>
+        ) : (
+          <div className="friends-toolbar-actions">
+            <button type="button" className="friend-icon-btn" aria-label="搜索好友" onClick={openSearch}>
+              <IconSearch />
+            </button>
+            <button
+              type="button"
+              className="friend-icon-btn"
+              aria-label="好友请求"
+              aria-expanded={requestsOpen}
+              onClick={toggleRequests}
+            >
+              <IconRequests />
+              {lists && lists.incoming.length > 0 && (
+                <span className="friend-badge" aria-hidden="true">
+                  {lists.incoming.length > 9 ? '9+' : lists.incoming.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="friend-icon-btn"
+              aria-label="添加好友"
+              aria-expanded={addOpen}
+              onClick={toggleAdd}
+            >
+              <IconAdd />
+            </button>
+          </div>
+        )}
+        <button type="button" className="friend-icon-btn" aria-label="关闭弹窗" onClick={onClose}>
+          <IconClose />
         </button>
-      </form>
+      </header>
+
+      {/* 好友请求面板:下滑展开,收到的请求为 ✓/✗,已发出的请求可 ✗ 取消。 */}
+      <div className={`friends-slide ${requestsOpen ? 'is-open' : ''}`}>
+        <div className="friends-slide-inner">
+          <section className="friends-requests">
+            {lists?.incoming.map((entry) => (
+              <div key={entry.id} className="friend-row">
+                <FriendIdentity name={entry.from.username} online={entry.from.online} />
+                <span className="friend-row-actions">
+                  <button
+                    type="button"
+                    className="friend-action-btn friend-action-accept"
+                    aria-label={`接受 ${entry.from.username} 的好友请求`}
+                    disabled={busy}
+                    onClick={() => void apply(() => friendsApi.respond(entry.id, true))}
+                  >
+                    <IconCheck />
+                  </button>
+                  <button
+                    type="button"
+                    className="friend-action-btn friend-action-decline"
+                    aria-label={`拒绝 ${entry.from.username} 的好友请求`}
+                    disabled={busy}
+                    onClick={() => void apply(() => friendsApi.respond(entry.id, false))}
+                  >
+                    <IconClose />
+                  </button>
+                </span>
+              </div>
+            ))}
+            {lists?.outgoing.map((entry) => (
+              <div key={entry.id} className="friend-row">
+                <FriendIdentity name={entry.to.username} online={entry.to.online} />
+                <span className="friend-row-actions">
+                  <span className="friend-pending">等待处理</span>
+                  <button
+                    type="button"
+                    className="friend-action-btn friend-action-decline"
+                    aria-label={`取消发给 ${entry.to.username} 的好友请求`}
+                    disabled={busy}
+                    onClick={() => void apply(() => friendsApi.cancel(entry.id))}
+                  >
+                    <IconClose />
+                  </button>
+                </span>
+              </div>
+            ))}
+            {lists && lists.incoming.length === 0 && lists.outgoing.length === 0 && (
+              <p className="friends-empty">暂无好友请求。</p>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {/* 添加好友面板:下滑展开 ID 输入框 + 发送按钮。 */}
+      <div className={`friends-slide ${addOpen ? 'is-open' : ''}`}>
+        <div className="friends-slide-inner">
+          <form className="friends-add" onSubmit={submitAdd}>
+            <input
+              type="text"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="输入对方用户 ID"
+              aria-label="输入对方用户 ID 添加好友"
+              maxLength={64}
+              disabled={busy}
+            />
+            <button
+              type="submit"
+              className="friend-action-btn friend-action-accept"
+              aria-label="发送好友请求"
+              disabled={busy || !input.trim()}
+            >
+              <IconSend />
+            </button>
+          </form>
+        </div>
+      </div>
+
       {actionError && (
         <p className="form-error" role="alert">
           {actionError}
@@ -75,83 +238,24 @@ export function FriendsPanel() {
       {!lists && !actionError && <p className="friends-empty">正在加载…</p>}
 
       {lists && (
-        <>
-          <section>
-            <h3 className="friends-section-title">我的好友</h3>
-            <ul className="friends-list">
-              {lists.friends.map((entry) => (
-                <FriendRow
-                  key={entry.id}
-                  entry={entry}
-                  busy={busy}
-                  onOpenChat={setChatPeer}
-                  onRemove={() => void apply(() => friendsApi.remove(entry.id))}
-                />
-              ))}
-            </ul>
-          </section>
-
-          {lists.incoming.length > 0 && (
-            <section>
-              <h3 className="friends-section-title">收到的请求</h3>
-              <ul className="friends-list">
-                {lists.incoming.map((entry) => (
-                  <li key={entry.id} className="friend-row">
-                    <FriendIdentity name={entry.from.username} />
-                    <span className="friend-row-actions">
-                      <button
-                        type="button"
-                        className="btn-link"
-                        disabled={busy}
-                        onClick={() => void apply(() => friendsApi.respond(entry.id, true))}
-                      >
-                        接受
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-link"
-                        disabled={busy}
-                        onClick={() => void apply(() => friendsApi.respond(entry.id, false))}
-                      >
-                        拒绝
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {lists.outgoing.length > 0 && (
-            <section>
-              <h3 className="friends-section-title">已发出的请求</h3>
-              <ul className="friends-list">
-                {lists.outgoing.map((entry) => (
-                  <li key={entry.id} className="friend-row">
-                    <FriendIdentity name={entry.to.username} />
-                    <button
-                      type="button"
-                      className="btn-link"
-                      disabled={busy}
-                      onClick={() => void apply(() => friendsApi.cancel(entry.id))}
-                    >
-                      取消
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-        </>
+        <section className="friends-main">
+          <h3 className="friends-section-title">我的好友</h3>
+          <ul className="friends-list">
+            {visibleFriends?.map((entry) => (
+              <FriendRow
+                key={entry.id}
+                entry={entry}
+                busy={busy}
+                onOpenChat={setChatPeer}
+                onRemove={() => void apply(() => friendsApi.remove(entry.id))}
+              />
+            ))}
+          </ul>
+        </section>
       )}
 
       {chatPeer && (
-        <Modal
-          title={chatPeer.name}
-          overlayClass="chat-overlay"
-          onClose={() => setChatPeer(null)}
-        >
+        <Modal title={chatPeer.name} overlayClass="chat-overlay" onClose={() => setChatPeer(null)}>
           <ChatBox peerId={chatPeer.id} peerName={chatPeer.name} />
         </Modal>
       )}
@@ -169,20 +273,20 @@ interface FriendRowProps {
 function FriendRow({ entry, busy, onOpenChat, onRemove }: FriendRowProps) {
   if (entry.assistant) {
     return (
-      <li className="friend-row">
+      <li className="friend-item">
         <button
           type="button"
-          className="friend-open"
+          className="friend-item-btn"
           onClick={() => onOpenChat({ id: entry.user.id, name: entry.user.username })}
         >
-          <FriendIdentity name={entry.user.username} />
+          <FriendIdentity name={entry.user.username} online={entry.user.online} large />
         </button>
       </li>
     );
   }
   return (
-    <li className="friend-row">
-      <FriendIdentity name={entry.user.username} />
+    <li className="friend-item">
+      <FriendIdentity name={entry.user.username} online={entry.user.online} large />
       <button type="button" className="btn-link" disabled={busy} onClick={onRemove}>
         删除
       </button>
@@ -190,14 +294,83 @@ function FriendRow({ entry, busy, onOpenChat, onRemove }: FriendRowProps) {
   );
 }
 
-/** 行左侧的统一身份区:首字头像 + 名字。 */
-function FriendIdentity({ name }: { name: string }) {
+/** 行左侧的统一身份区:圆形头像 + 名称 + 在线状态。 */
+function FriendIdentity({
+  name,
+  online,
+  large,
+}: {
+  name: string;
+  online?: boolean;
+  large?: boolean;
+}) {
   return (
     <>
-      <span className="friend-avatar" aria-hidden="true">
+      <span className={large ? 'friend-avatar friend-avatar-lg' : 'friend-avatar'} aria-hidden="true">
         {name.slice(0, 1)}
       </span>
-      <span className="friend-name">{name}</span>
+      <span className="friend-meta">
+        <span className="friend-name">{name}</span>
+        <span className="friend-status">
+          <span className={online ? 'status-dot status-online' : 'status-dot status-offline'} aria-hidden="true" />
+          {online ? '在线' : '离线'}
+        </span>
+      </span>
     </>
+  );
+}
+
+function IconSearch() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="m16.2 16.2 4.3 4.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconRequests() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M3.5 19c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M17 13.5c2.2.5 3.3 2.3 3.5 5.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconAdd() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconSend() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="m4 11.2 16-7-7 16-2.6-6.4L4 11.2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="m5 12.5 5 5L19.5 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconClose() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
   );
 }

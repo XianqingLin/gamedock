@@ -98,6 +98,7 @@ function makeFakeApi() {
         return json({ ok: true });
       }
       if (path === '/api/friends' && method === 'GET') return json(lists());
+      if (path === '/api/presence' && method === 'POST') return json({ ok: true });
       if (path === '/api/friends/requests' && method === 'POST') {
         const target = [...users.values()].find((u) => u.id === body.id);
         if (!target) return json({ error: '找不到该用户' }, 400);
@@ -278,13 +279,16 @@ describe('好友面板', () => {
 
     // 等待面板初始加载完成,避免提交按钮仍处于 busy 禁用状态
     await screen.findByText('我的好友');
-    fireEvent.change(screen.getByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
+    fireEvent.click(screen.getByRole('button', { name: '添加好友' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
       target: { value: bobId },
     });
-    fireEvent.click(screen.getByRole('button', { name: '发送请求' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送好友请求' }));
 
-    expect(await screen.findByText('已发出的请求')).toBeInTheDocument();
+    // 发送成功后自动展开请求面板,能看到已发出的请求
+    expect(await screen.findByText('等待处理')).toBeInTheDocument();
     expect(screen.getByText('bob')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '添加好友' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('好友列表固定包含不可删除的 AI 助手,发送请求失败显示服务端错误', async () => {
@@ -293,14 +297,15 @@ describe('好友面板', () => {
     await screen.findByText('alice');
     openFriendsPanel();
 
-    await screen.findByText('小舟AI');
+    await screen.findByRole('button', { name: /小舟AI/ });
     // AI 助手不可删除:列表里唯一的「删除」按钮数量等于人类好友数量(0)。
     expect(screen.queryByRole('button', { name: '删除' })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
+    fireEvent.click(screen.getByRole('button', { name: '添加好友' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
       target: { value: 'ghost' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '发送请求' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送好友请求' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('找不到该用户');
   });
 
@@ -310,7 +315,7 @@ describe('好友面板', () => {
     await screen.findByText('alice');
     openFriendsPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: '小舟AI' }));
+    fireEvent.click(await screen.findByRole('button', { name: /小舟AI/ }));
     const chatDialog = await screen.findByRole('dialog', { name: '小舟AI' });
     expect(chatDialog).toBeVisible();
 
@@ -338,9 +343,13 @@ describe('好友面板', () => {
     await screen.findByText('bob');
     openFriendsPanel();
 
-    expect(await screen.findByText('收到的请求')).toBeInTheDocument();
+    // 展开好友请求面板,再点对号接受(请求来自 alice)
+    await screen.findByRole('button', { name: /小舟AI/ });
+    fireEvent.click(screen.getByRole('button', { name: '好友请求' }));
+    fireEvent.click(await screen.findByRole('button', { name: '接受 alice 的好友请求' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '接受' }));
     expect(await screen.findByText('我的好友')).toBeInTheDocument();
+    expect(screen.getByText('alice')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^接受/ })).not.toBeInTheDocument();
   });
 });

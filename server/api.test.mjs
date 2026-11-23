@@ -151,6 +151,37 @@ describe('好友 HTTP 流程', () => {
   });
 });
 
+describe('在线心跳与好友在线状态', () => {
+  it('未登录拒绝;心跳后的好友在好友列表中显示在线', async () => {
+    const anon = await call('POST', '/api/presence');
+    expect(anon.status).toBe(401);
+    expect(anon.data.error).toBe('需要登录');
+
+    const a = makeClient();
+    const b = makeClient();
+    await a.request('POST', '/api/auth/register', { username: 'online_a', password: 'secret66' });
+    await b.request('POST', '/api/auth/register', { username: 'online_b', password: 'secret66' });
+    const aId = (await a.request('GET', '/api/auth/me')).data.user.id;
+    const bId = (await b.request('GET', '/api/auth/me')).data.user.id;
+
+    await a.request('POST', '/api/friends/requests', { id: bId });
+    const requestId = (await b.request('GET', '/api/friends')).data.incoming[0].id;
+    await b.request('POST', `/api/friends/requests/${requestId}/accept`);
+
+    const beat = await b.request('POST', '/api/presence');
+    expect(beat.status).toBe(200);
+
+    const listsA = await a.request('GET', '/api/friends');
+    const bEntry = listsA.data.friends.find((f) => f.user.id === bId);
+    expect(bEntry.user.online).toBe(true);
+
+    // a 未发过心跳 → 在 b 眼里离线。
+    const listsB = await b.request('GET', '/api/friends');
+    const aEntry = listsB.data.friends.find((f) => f.user.id === aId);
+    expect(aEntry.user.online).toBe(false);
+  });
+});
+
 describe('存档 HTTP 流程', () => {
   it('登录后写入/读取/列出/删除存档槽位', async () => {
     const client = makeClient();
