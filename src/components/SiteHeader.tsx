@@ -25,6 +25,11 @@ export function SiteHeader() {
   const parent = /^\/games\/[^/]+$/.test(location.pathname) ? '/browse' : null;
   const goBackToParent = useBackToParent();
 
+  // 「探索/浏览」导航只在游戏相关页面(探索/浏览/游戏详情)显示;
+  // 成就墙、存档等非游戏栏目与游戏浏览无关,顶栏不出现这两个入口。
+  const showGameNav =
+    location.pathname === '/' || location.pathname.startsWith('/browse') || /^\/games\/[^/]+$/.test(location.pathname);
+
   // 浏览页 URL 的搜索词变化（前进/后退、清除筛选）时同步输入框。
   useEffect(() => {
     setInput(params.get('q') ?? '');
@@ -71,21 +76,23 @@ export function SiteHeader() {
           <div className="header-search">
             <SearchBar value={input} onChange={updateQuery} />
           </div>
-          <nav className="site-nav" aria-label="主导航">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) => `site-nav-link${isActive ? ' is-active' : ''}`}
-            >
-              探索
-            </NavLink>
-            <NavLink
-              to="/browse"
-              className={({ isActive }) => `site-nav-link${isActive ? ' is-active' : ''}`}
-            >
-              浏览
-            </NavLink>
-          </nav>
+          {showGameNav && (
+            <nav className="site-nav" aria-label="主导航">
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) => `site-nav-link${isActive ? ' is-active' : ''}`}
+              >
+                探索
+              </NavLink>
+              <NavLink
+                to="/browse"
+                className={({ isActive }) => `site-nav-link${isActive ? ' is-active' : ''}`}
+              >
+                浏览
+              </NavLink>
+            </nav>
+          )}
         </div>
         <div className="site-header-actions">
           <UserArea onOpenFriends={() => setSocialOpen(true)} />

@@ -373,6 +373,9 @@ describe('游客身份', () => {
     closePanel();
     fireEvent.click(screen.getByRole('link', { name: '存档' }));
     expect(await screen.findByText('暂无存档')).toBeInTheDocument();
+    // 非游戏栏目的顶栏不出现「探索/浏览」导航
+    expect(screen.queryByRole('link', { name: '探索' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '浏览' })).not.toBeInTheDocument();
   });
 });
 
