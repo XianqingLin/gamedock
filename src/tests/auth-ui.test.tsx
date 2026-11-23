@@ -277,7 +277,7 @@ describe('好友面板', () => {
     openFriendsPanel();
 
     // 等待面板初始加载完成,避免提交按钮仍处于 busy 禁用状态
-    await screen.findByText('还没有其他好友,通过上面的输入框发送好友请求吧。');
+    await screen.findByText('我的好友');
     fireEvent.change(screen.getByRole('textbox', { name: '输入对方用户 ID 添加好友' }), {
       target: { value: bobId },
     });

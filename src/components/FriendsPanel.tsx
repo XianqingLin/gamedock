@@ -42,8 +42,6 @@ export function FriendsPanel() {
     return <p className="friends-empty">登录或注册后才能使用好友功能。</p>;
   }
 
-  const humanFriends = lists?.friends.filter((entry) => !entry.assistant) ?? [];
-
   return (
     <div className="friends-panel">
       <form
@@ -99,7 +97,7 @@ export function FriendsPanel() {
               <ul className="friends-list">
                 {lists.incoming.map((entry) => (
                   <li key={entry.id} className="friend-row">
-                    <span>{entry.from.username}</span>
+                    <FriendIdentity name={entry.from.username} />
                     <span className="friend-row-actions">
                       <button
                         type="button"
@@ -130,7 +128,7 @@ export function FriendsPanel() {
               <ul className="friends-list">
                 {lists.outgoing.map((entry) => (
                   <li key={entry.id} className="friend-row">
-                    <span>{entry.to.username}</span>
+                    <FriendIdentity name={entry.to.username} />
                     <button
                       type="button"
                       className="btn-link"
@@ -145,9 +143,6 @@ export function FriendsPanel() {
             </section>
           )}
 
-          {humanFriends.length === 0 && lists.incoming.length === 0 && lists.outgoing.length === 0 && (
-            <p className="friends-empty">还没有其他好友,通过上面的输入框发送好友请求吧。</p>
-          )}
         </>
       )}
 
@@ -180,17 +175,29 @@ function FriendRow({ entry, busy, onOpenChat, onRemove }: FriendRowProps) {
           className="friend-open"
           onClick={() => onOpenChat({ id: entry.user.id, name: entry.user.username })}
         >
-          {entry.user.username}
+          <FriendIdentity name={entry.user.username} />
         </button>
       </li>
     );
   }
   return (
     <li className="friend-row">
-      <span>{entry.user.username}</span>
+      <FriendIdentity name={entry.user.username} />
       <button type="button" className="btn-link" disabled={busy} onClick={onRemove}>
         删除
       </button>
     </li>
+  );
+}
+
+/** 行左侧的统一身份区:首字头像 + 名字。 */
+function FriendIdentity({ name }: { name: string }) {
+  return (
+    <>
+      <span className="friend-avatar" aria-hidden="true">
+        {name.slice(0, 1)}
+      </span>
+      <span className="friend-name">{name}</span>
+    </>
   );
 }

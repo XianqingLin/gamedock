@@ -1550,7 +1550,7 @@ input {
 .friends-panel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
 }
 
 .friends-add {
@@ -1561,6 +1561,7 @@ input {
 .friends-add input {
   flex: 1;
   min-width: 0;
+  border-radius: 6px;
 }
 
 .friends-add .btn {
@@ -1568,30 +1569,56 @@ input {
 }
 
 .friends-section-title {
-  margin: 0 0 7px;
+  margin: 0 0 8px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+  letter-spacing: 0.08em;
 }
 
 .friends-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .friend-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  min-height: 48px;
-  border-bottom: 1px solid var(--line-soft);
+  min-height: 44px;
+  padding: 0 8px;
+  margin: 0 -8px;
+  border-radius: 6px;
   font-size: 14px;
 }
 
-.friend-row:last-child {
-  border-bottom: 0;
+.friend-row:hover {
+  background: var(--surface-hover);
+}
+
+.friend-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #2b2b30;
+  color: #c8c8ce;
+  font-size: 13px;
+}
+
+.friend-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .friend-row-actions {
@@ -1603,12 +1630,16 @@ input {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.6;
 }
 
 /* AI 助手行:外观与普通好友行一致,整行可点击打开聊天框。 */
 .friend-open {
   flex: 1;
-  min-height: 48px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   padding: 0;
   border: 0;
   background: none;
@@ -1616,11 +1647,12 @@ input {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  border-radius: 6px;
 }
 
 .friend-open:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
 /* ---------- 聊天框(叠加在好友抽屉之上) ---------- */
