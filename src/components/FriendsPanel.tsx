@@ -411,11 +411,11 @@ function IconAdd() {
       {/* 小人 + 右下角加号徽章(实心);徽章底色用工具条带状区底色,形成镂空叠放效果 */}
       <circle cx="10.8" cy="6" r="3.2" fill="currentColor" />
       <path d="M5.2 20.6c0-4 2.5-6.6 5.9-6.6 3.3 0 5.8 2.6 5.8 6.6Z" fill="currentColor" />
-      <circle cx="17.3" cy="17.3" r="4.5" fill="#2b2b30" />
+      <circle cx="17.4" cy="17.4" r="5.3" fill="#2b2b30" />
       <path
-        d="M17.3 14.9v4.8M14.9 17.3h4.8"
+        d="M17.4 14.4v6M14.4 17.4h6"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.9"
         strokeLinecap="round"
       />
     </svg>
