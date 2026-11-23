@@ -397,9 +397,22 @@ function IconSearch() {
 function IconRequests() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
+      {/* 小人挥手:头 + 身体 + 抬起的手臂,手旁三道短线示意摆动 */}
+      <circle cx="9.5" cy="6.2" r="2.9" stroke="currentColor" strokeWidth="1.5" />
       <path
-        d="M3.5 19c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 5.5a3 3 0 0 1 0 5.8M17 13.5c2.2.5 3.3 2.3 3.5 5.5"
+        d="M4 20c.5-4.4 2.5-6.6 5.5-6.6 1.8 0 3.2.7 4.3 2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12.6 14.2c2-1.2 3.6-3.4 4.4-6.4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M18.8 6.2 20.6 4.4M19.8 8.6 22 8M16.6 4.8l.6-2.2"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
