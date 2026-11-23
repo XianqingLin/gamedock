@@ -397,26 +397,10 @@ function IconSearch() {
 function IconRequests() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      {/* 小人挥手:头 + 身体 + 抬起的手臂,手旁三道短线示意摆动 */}
-      <circle cx="9.5" cy="6.2" r="2.9" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M4 20c.5-4.4 2.5-6.6 5.5-6.6 1.8 0 3.2.7 4.3 2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12.6 14.2c2-1.2 3.6-3.4 4.4-6.4"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-      <path
-        d="M18.8 6.2 20.6 4.4M19.8 8.6 22 8M16.6 4.8l.6-2.2"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
+      {/* 抬手的小人(实心):头 + 圆顶身体 + 斜向上的手臂 */}
+      <circle cx="13.6" cy="6" r="3.2" fill="currentColor" />
+      <path d="M7.4 20.6c0-4 2.5-6.6 5.9-6.6 3.3 0 5.8 2.6 5.8 6.6Z" fill="currentColor" />
+      <path d="M9.8 14.8 5.6 9.2" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -424,7 +408,16 @@ function IconRequests() {
 function IconAdd() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      {/* 小人 + 右下角加号徽章(实心);徽章底色用工具条带状区底色,形成镂空叠放效果 */}
+      <circle cx="10.8" cy="6" r="3.2" fill="currentColor" />
+      <path d="M5.2 20.6c0-4 2.5-6.6 5.9-6.6 3.3 0 5.8 2.6 5.8 6.6Z" fill="currentColor" />
+      <circle cx="17.3" cy="17.3" r="4.5" fill="#2b2b30" />
+      <path
+        d="M17.3 14.9v4.8M14.9 17.3h4.8"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
