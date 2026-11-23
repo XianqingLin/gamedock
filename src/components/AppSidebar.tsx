@@ -1,10 +1,14 @@
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 
 /**
- * 全站左侧栏：品牌 + 「游戏」入口（对应探索页，即 Epic 侧栏「商城」的位置）。
- * 「探索/浏览」导航只在右侧顶栏，不在侧栏展开。
+ * 全站左侧栏:品牌 + 「游戏」「个人主页」入口。
+ * 「探索/浏览」导航只在右侧顶栏,不在侧栏展开;
+ * 「个人主页」含二级目录(个人信息/成就墙/存档),位于个人主页区块时自动展开。
  */
 export function AppSidebar() {
+  const { pathname } = useLocation();
+  const profileSection = pathname.startsWith('/profile');
+
   return (
     <aside className="app-sidebar">
       <div className="app-sidebar-brand">
@@ -35,6 +39,46 @@ export function AppSidebar() {
           </svg>
           <span>游戏</span>
         </NavLink>
+
+        <NavLink
+          to="/profile"
+          className={({ isActive }) => `app-sidebar-link${isActive ? ' is-active' : ''}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+            <path
+              d="M5 20c.5-4.3 2.8-6.5 7-6.5s6.5 2.2 7 6.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+          <span>个人主页</span>
+        </NavLink>
+
+        {profileSection && (
+          <div className="app-sidebar-subnav">
+            <NavLink
+              to="/profile"
+              end
+              className={({ isActive }) => `app-sidebar-sublink${isActive ? ' is-active' : ''}`}
+            >
+              个人信息
+            </NavLink>
+            <NavLink
+              to="/profile/achievements"
+              className={({ isActive }) => `app-sidebar-sublink${isActive ? ' is-active' : ''}`}
+            >
+              成就墙
+            </NavLink>
+            <NavLink
+              to="/profile/saves"
+              className={({ isActive }) => `app-sidebar-sublink${isActive ? ' is-active' : ''}`}
+            >
+              存档
+            </NavLink>
+          </div>
+        )}
       </nav>
     </aside>
   );

@@ -4,6 +4,7 @@ import type { FriendEntry, FriendLists } from '../lib/api';
 import { useAuth } from '../state/auth';
 import { ChatBox } from './ChatBox';
 import { Modal } from './Modal';
+import { UserAvatar } from './UserAvatar';
 
 /**
  * 好友面板(苹果风):顶行左侧为当前用户身份(头像/名称/状态),右侧为关闭钮;
@@ -111,6 +112,7 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
           <div className="friends-self">
             <FriendIdentity
               name={lists?.me?.username ?? user?.username ?? ''}
+              avatar={lists?.me?.avatar ?? user?.avatar ?? null}
               online={lists?.me?.online}
               large
             />
@@ -219,7 +221,7 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
             <div className="friends-requests">
               {lists.incoming.map((entry) => (
                 <div key={entry.id} className="friend-row">
-                  <FriendIdentity name={entry.from.username} online={entry.from.online} large />
+                  <FriendIdentity name={entry.from.username} avatar={entry.from.avatar} online={entry.from.online} large />
                   <span className="friend-row-actions">
                     <button
                       type="button"
@@ -244,7 +246,7 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
               ))}
               {lists.outgoing.map((entry) => (
                 <div key={entry.id} className="friend-row">
-                  <FriendIdentity name={entry.to.username} online={entry.to.online} large />
+                  <FriendIdentity name={entry.to.username} avatar={entry.to.avatar} online={entry.to.online} large />
                   <span className="friend-row-actions">
                     <span className="friend-pending">等待处理</span>
                     <button
@@ -304,14 +306,14 @@ function FriendRow({ entry, busy, onOpenChat, onRemove }: FriendRowProps) {
           className="friend-item-btn"
           onClick={() => onOpenChat({ id: entry.user.id, name: entry.user.username })}
         >
-          <FriendIdentity name={entry.user.username} online={entry.user.online} large />
+          <FriendIdentity name={entry.user.username} avatar={entry.user.avatar} online={entry.user.online} large />
         </button>
       </li>
     );
   }
   return (
     <li className="friend-item">
-      <FriendIdentity name={entry.user.username} online={entry.user.online} large />
+      <FriendIdentity name={entry.user.username} avatar={entry.user.avatar} online={entry.user.online} large />
       <button type="button" className="btn-link" disabled={busy} onClick={onRemove}>
         删除
       </button>
@@ -319,21 +321,21 @@ function FriendRow({ entry, busy, onOpenChat, onRemove }: FriendRowProps) {
   );
 }
 
-/** 行左侧的统一身份区:圆形头像 + 名称 + 在线状态。 */
+/** 行左侧的统一身份区:圆形头像(预设或首字母)+ 名称 + 在线状态。 */
 function FriendIdentity({
   name,
+  avatar,
   online,
   large,
 }: {
   name: string;
+  avatar?: string | null;
   online?: boolean;
   large?: boolean;
 }) {
   return (
     <span className="friend-identity">
-      <span className={large ? 'friend-avatar friend-avatar-lg' : 'friend-avatar'} aria-hidden="true">
-        {name.slice(0, 1)}
-      </span>
+      <UserAvatar user={{ username: name, avatar }} className={large ? 'friend-avatar-lg' : 'friend-avatar'} />
       <span className="friend-meta">
         <span className="friend-name">{name}</span>
         <span className="friend-status">

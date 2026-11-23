@@ -8,8 +8,12 @@ import App from '../App';
  * 用于驱动真实 UI 组件的集成测试。
  */
 function makeFakeApi() {
-  const users = new Map<string, { id: string; username: string; createdAt: string; password: string }>();
+  const users = new Map<
+    string,
+    { id: string; username: string; createdAt: string; password: string; avatar: string | null }
+  >();
   const friendships: { id: string; a: string; b: string; status: 'pending' | 'accepted'; requestedBy: string }[] = [];
+  const saves: { slug: string; key: string; updatedAt: string; size: number }[] = [];
   const chatHistory: {
     id: string;
     userId: string;
@@ -24,7 +28,7 @@ function makeFakeApi() {
   const usernameOf = (id: string) => [...users.values()].find((u) => u.id === id)?.username ?? '(已注销)';
   const publicUser = (id: string) => {
     const u = [...users.values()].find((entry) => entry.id === id)!;
-    return { id: u.id, username: u.username, createdAt: u.createdAt };
+    return { id: u.id, username: u.username, createdAt: u.createdAt, avatar: u.avatar };
   };
   const lists = () => {
     const friends: unknown[] = [
@@ -62,7 +66,12 @@ function makeFakeApi() {
         username,
         createdAt: '2026-11-16T00:00:00Z',
         password: 'irrelevant',
+        avatar: null,
       });
+    },
+    /** 注入一条存档槽位(存档页测试用)。 */
+    seedSave(slug: string, key: string, updatedAt = '2026-11-23T00:00:00Z', size = 128) {
+      saves.push({ slug, key, updatedAt, size });
     },
     /** 注入一条 from → to 的待处理好友请求。 */
     seedIncomingRequest(fromUsername: string, toUsername: string) {
@@ -86,7 +95,7 @@ function makeFakeApi() {
         }
         if (password.length < 6) return json({ error: '密码需为 6-128 位' }, 400);
         if (users.has(username.toLowerCase())) return json({ error: '用户名已存在' }, 400);
-        users.set(username.toLowerCase(), { id: `u${++seq}`, username, createdAt: '2026-11-16T00:00:00Z', password });
+        users.set(username.toLowerCase(), { id: `u${++seq}`, username, createdAt: '2026-11-16T00:00:00Z', password, avatar: null });
         currentUserId = users.get(username.toLowerCase())!.id;
         return json({ user: publicUser(currentUserId) });
       }
@@ -98,6 +107,43 @@ function makeFakeApi() {
       }
       if (path === '/api/auth/logout' && method === 'POST') {
         currentUserId = null;
+        return json({ ok: true });
+      }
+      if (path === '/api/auth/profile' && method === 'PATCH') {
+        if (!currentUserId) return json({ error: '需要登录' }, 401);
+        const me = [...users.values()].find((u) => u.id === currentUserId)!;
+        if (body.username !== undefined) {
+          const username = String(body.username);
+          if (!/^[a-zA-Z0-9_一-龥]{2,24}$/u.test(username)) {
+            return json({ error: '用户名需为 2-24 位字母、数字、下划线或中文' }, 400);
+          }
+          const owner = users.get(username.toLowerCase());
+          if (owner && owner.id !== me.id) return json({ error: '用户名已存在' }, 400);
+          me.username = username;
+        }
+        if (body.avatar !== undefined) {
+          if (body.avatar !== null && !/^av(?:0|[1-9]|1[0-6])$/.test(String(body.avatar))) {
+            return json({ error: '未知头像' }, 400);
+          }
+          me.avatar = body.avatar as string | null;
+        }
+        return json({ user: publicUser(me.id) });
+      }
+      if (path === '/api/saves' && method === 'GET') {
+        if (!currentUserId) return json({ error: '需要登录' }, 401);
+        const bySlug = new Map<string, { key: string; updatedAt: string; size: number }[]>();
+        for (const slot of saves) {
+          const slots = bySlug.get(slot.slug) ?? [];
+          slots.push({ key: slot.key, updatedAt: slot.updatedAt, size: slot.size });
+          bySlug.set(slot.slug, slots);
+        }
+        return json({ games: [...bySlug.entries()].map(([slug, slots]) => ({ slug, slots })) });
+      }
+      const saveRemove = /\/api\/saves\/([\w-]+)\/([\w-]+)$/.exec(path);
+      if (saveRemove && method === 'DELETE') {
+        if (!currentUserId) return json({ error: '需要登录' }, 401);
+        const index = saves.findIndex((s) => s.slug === saveRemove[1] && s.key === saveRemove[2]);
+        if (index !== -1) saves.splice(index, 1);
         return json({ ok: true });
       }
       if (path === '/api/friends' && method === 'GET') return json(lists());
@@ -254,14 +300,92 @@ describe('游客身份', () => {
     expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument();
   });
 
-  it('已登录用户可以从头像菜单进入个人主页', async () => {
+  it('已登录用户可以从头像菜单进入个人主页,主页展示名称与用户 ID', async () => {
     renderApp();
     await registerViaUi('alice', 'secret66');
     await openUserMenu('alice');
 
-    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
+    const menu = within(screen.getByRole('group', { name: '用户操作' }));
+    fireEvent.click(menu.getByRole('link', { name: '个人主页' }));
     expect(await screen.findByRole('heading', { name: 'alice' })).toBeInTheDocument();
-    expect(screen.getByText('加入时间')).toBeInTheDocument();
+    // 新版主页:ID 在名称下方悬浮出复制钮;侧栏个人主页二级目录展开
+    expect(screen.getByRole('button', { name: '复制用户 ID' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '更换头像' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '个人信息' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '成就墙' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '存档' })).toBeInTheDocument();
+  });
+
+  it('个人主页内联改名:保存后顶栏与主页同步,重名报服务端错误', async () => {
+    fake.addUser('bob');
+    renderApp();
+    await registerViaUi('alice', 'secret66');
+    await screen.findByText('alice');
+    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
+    await screen.findByRole('heading', { name: 'alice' });
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑用户名' }));
+    const input = screen.getByRole('textbox', { name: '用户名' });
+    fireEvent.change(input, { target: { value: 'bob' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('用户名已存在');
+    // 编辑态下 h1 被表单替换,改名失败停留在编辑态
+    expect(screen.getByRole('textbox', { name: '用户名' })).toHaveValue('bob');
+
+    fireEvent.change(screen.getByRole('textbox', { name: '用户名' }), { target: { value: 'alice2' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    expect(await screen.findByRole('heading', { name: 'alice2' })).toBeInTheDocument();
+  });
+
+  it('头像弹窗:点击预设立即保存,重新进入仍选中', async () => {
+    renderApp();
+    await registerViaUi('alice', 'secret66');
+    await screen.findByText('alice');
+    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
+    await screen.findByRole('heading', { name: 'alice' });
+
+    fireEvent.click(screen.getByRole('button', { name: '更换头像' }));
+    const dialog = screen.getByRole('dialog', { name: '选择头像' });
+    const fox = within(dialog).getByRole('option', { name: /狐狸/ });
+    expect(fox).toHaveAttribute('aria-selected', 'false');
+    fireEvent.click(fox);
+    await waitFor(() => expect(fox).toHaveAttribute('aria-selected', 'true'));
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: '更换头像' }));
+    const reopened = screen.getByRole('dialog', { name: '选择头像' });
+    expect(within(reopened).getByRole('option', { name: /狐狸/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('存档页:按游戏分组展示槽位,可删除单条', async () => {
+    fake.seedSave('bvn', 'slot1');
+    fake.seedSave('bvn', 'slot2');
+    fake.seedSave('tether-together', 'checkpoint');
+    renderApp();
+    await registerViaUi('alice', 'secret66');
+    await screen.findByText('alice');
+    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
+    fireEvent.click(await screen.findByRole('link', { name: '存档' }));
+
+    expect(await screen.findByRole('heading', { name: '死神 VS 火影 重构版' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '默契行动' })).toBeInTheDocument();
+    expect(screen.getByText('slot1')).toBeInTheDocument();
+    expect(screen.getByText('checkpoint')).toBeInTheDocument();
+
+    const slot1row = screen.getByText('slot1').closest('.saves-row') as HTMLElement;
+    fireEvent.click(within(slot1row).getByRole('button', { name: '删除' }));
+    await waitFor(() => expect(screen.queryByText('slot1')).not.toBeInTheDocument());
+    expect(screen.getByText('slot2')).toBeInTheDocument();
+    expect(screen.getByText('checkpoint')).toBeInTheDocument();
+  });
+
+  it('存档页空状态', async () => {
+    renderApp();
+    await registerViaUi('alice', 'secret66');
+    await screen.findByText('alice');
+    fireEvent.click(screen.getByRole('link', { name: '个人主页' }));
+    fireEvent.click(await screen.findByRole('link', { name: '存档' }));
+    expect(await screen.findByText('暂无存档')).toBeInTheDocument();
   });
 });
 

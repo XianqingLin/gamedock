@@ -7,6 +7,8 @@ import { BrowsePage } from './pages/BrowsePage';
 import { GameDetailPage } from './pages/GameDetailPage';
 import { PlayPage } from './pages/PlayPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { AchievementsPage } from './pages/AchievementsPage';
+import { SavesPage } from './pages/SavesPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AppSidebar } from './components/AppSidebar';
 import { trackNavigation } from './lib/navStack';
@@ -59,6 +61,8 @@ export default function App() {
             <Route path="/games/:slug" element={<GameDetailPage />} />
             <Route path="/play/:slug" element={<PlayPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/achievements" element={<AchievementsPage />} />
+            <Route path="/profile/saves" element={<SavesPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </div>

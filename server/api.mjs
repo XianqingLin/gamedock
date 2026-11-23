@@ -1,4 +1,4 @@
-import { registerUser, verifyLogin, publicUser } from './auth.mjs';
+import { registerUser, verifyLogin, publicUser, updateProfile } from './auth.mjs';
 import { sendFriendRequest, respondToRequest, cancelRequest, removeFriend, listFriends } from './friends.mjs';
 import { listChatMessages, sendChatMessage } from './chat.mjs';
 import {
@@ -186,6 +186,16 @@ async function handleAuthApi(ctx, pathname) {
     return true;
   }
 
+  if (pathname === '/api/auth/profile' && method === 'PATCH') {
+    const user = await requireAuth(ctx);
+    if (!user) return true;
+    const body = await readJsonBody(request);
+    if (!body) return respond(ctx, sendJson(400, { error: '请求体无效' }));
+    const result = await updateProfile(env.store, user.id, body);
+    if (!result.ok) return respond(ctx, sendJson(400, { error: result.error }));
+    return respond(ctx, sendJson(200, { user: publicUser(result.user) }));
+  }
+
   return false;
 }
 
@@ -275,7 +285,7 @@ async function handleChatApi(ctx, pathname) {
 }
 
 /**
- * 平台存档:GET /api/saves/:slug(槽位列表)、
+ * 平台存档:GET /api/saves(跨游戏聚合)、GET /api/saves/:slug(槽位列表)、
  * GET|PUT|DELETE /api/saves/:slug/:key。需登录;slug 必须是已接入的游戏。
  */
 async function handleSavesApi(ctx, pathname) {
@@ -284,6 +294,12 @@ async function handleSavesApi(ctx, pathname) {
 
   const user = await requireAuth(ctx);
   if (!user) return true;
+
+  if (pathname === '/api/saves' && method === 'GET') {
+    const result = await env.saves.listAllSaves(user.id);
+    if (!result.ok) return respond(ctx, sendJson(500, { error: result.error }));
+    return respond(ctx, sendJson(200, result));
+  }
 
   const match = /^\/api\/saves\/([a-z0-9-]{1,64})(?:\/([a-zA-Z0-9_-]{1,64}))?$/.exec(pathname);
   if (!match) return respond(ctx, sendJson(404, { error: '接口不存在' }));

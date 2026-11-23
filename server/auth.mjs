@@ -7,6 +7,9 @@ export const USERNAME_PATTERN = /^[a-zA-Z0-9_一-龥]{2,24}$/u;
 const USER_ID_MIN = 1_000_000;
 const USER_ID_RANGE = 99_000_000;
 
+// 头像预设编号:av0 = 小舟AI 专属,av1~av16 = 用户可选(清单见前端 src/data/avatars.tsx)。
+export const AVATAR_ID_PATTERN = /^av(?:0|[1-9]|1[0-6])$/;
+
 /** [USER_ID_MIN, USER_ID_MIN + USER_ID_RANGE) 内的无偏随机整数,返回十进制字符串。 */
 function randomUserId() {
   const buffer = new Uint32Array(1);
@@ -29,7 +32,7 @@ export function validateRegistration(username, password) {
 }
 
 export function publicUser(user) {
-  return { id: user.id, username: user.username, createdAt: user.createdAt };
+  return { id: user.id, username: user.username, createdAt: user.createdAt, avatar: user.avatar ?? null };
 }
 
 /** 用户名不区分大小写查找(存储实现负责大小写归一)。 */
@@ -69,4 +72,43 @@ export async function verifyLogin(store, { username, password }) {
     return { ok: false, error: '用户名或密码错误' };
   }
   return { ok: true, user };
+}
+
+/**
+ * 资料更新(PATCH /api/auth/profile):改用户名(= 登录名,唯一身份)与头像。
+ * - username 沿用注册校验(2-24 位)与唯一约束;与现值相同视为未改名,直接通过。
+ * - avatar 为系统预设编号(见前端 src/data/avatars.tsx),null 恢复默认首字母头像。
+ */
+export async function updateProfile(store, userId, { username, avatar } = {}) {
+  const user = await store.getUserById(userId);
+  if (!user) return { ok: false, error: '用户不存在' };
+
+  const patch = {};
+  if (username !== undefined) {
+    if (typeof username !== 'string' || !USERNAME_PATTERN.test(username)) {
+      return { ok: false, error: '用户名需为 2-24 位字母、数字、下划线或中文' };
+    }
+    const sameName = user.username.toLowerCase() === username.toLowerCase();
+    if (!sameName) {
+      const existing = await store.getUserByUsernameLower(username.toLowerCase());
+      if (existing) return { ok: false, error: '用户名已存在' };
+    }
+    patch.username = username;
+  }
+  if (avatar !== undefined) {
+    if (avatar !== null && (typeof avatar !== 'string' || !AVATAR_ID_PATTERN.test(avatar))) {
+      return { ok: false, error: '未知头像' };
+    }
+    patch.avatar = avatar;
+  }
+  if (!Object.keys(patch).length) return { ok: false, error: '没有可更新的字段' };
+
+  try {
+    await store.updateUser(userId, patch);
+  } catch (err) {
+    // 并发改名撞唯一约束(D1 UNIQUE 冲突):统一按用户名已存在处理,其余错误上抛。
+    if (String(err?.message ?? '').includes('UNIQUE')) return { ok: false, error: '用户名已存在' };
+    throw err;
+  }
+  return { ok: true, user: await store.getUserById(userId) };
 }

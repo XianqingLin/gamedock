@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { registerUser, validateRegistration, verifyLogin, findUserByUsername } from './auth.mjs';
+import {
+  registerUser,
+  validateRegistration,
+  verifyLogin,
+  findUserByUsername,
+  updateProfile,
+  publicUser,
+} from './auth.mjs';
 import { hashPassword, verifyPassword } from './password.mjs';
 import { createMemoryStore } from './store.mjs';
 
@@ -55,6 +62,52 @@ describe('registerUser / verifyLogin', () => {
     expect(a.user.id).toMatch(/^\d{7,8}$/);
     expect(b.user.id).toMatch(/^\d{7,8}$/);
     expect(a.user.id).not.toBe(b.user.id);
+  });
+
+  it('updateProfile 改名:校验/查重/大小写归一,成功后可按新名登录', async () => {
+    const store = createMemoryStore();
+    const a = await registerUser(store, { username: 'alice', password: 'secret66' });
+    const b = await registerUser(store, { username: 'bobby', password: 'secret66' });
+    expect(a.ok && b.ok).toBe(true);
+
+    const bad = await updateProfile(store, a.user.id, { username: 'x!' });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toBe('用户名需为 2-24 位字母、数字、下划线或中文');
+
+    const dup = await updateProfile(store, a.user.id, { username: 'BOBBY' });
+    expect(dup.ok).toBe(false);
+    expect(dup.error).toBe('用户名已存在');
+
+    const same = await updateProfile(store, b.user.id, { username: 'Bobby' });
+    expect(same.ok).toBe(true);
+
+    const renamed = await updateProfile(store, a.user.id, { username: 'alice2' });
+    expect(renamed.ok).toBe(true);
+    expect(renamed.user.username).toBe('alice2');
+    const login = await verifyLogin(store, { username: 'alice2', password: 'secret66' });
+    expect(login.ok).toBe(true);
+  });
+
+  it('updateProfile 头像:合法预设编号写入,非法拒绝,null 恢复默认', async () => {
+    const store = createMemoryStore();
+    const reg = await registerUser(store, { username: 'avatar_user', password: 'secret66' });
+
+    const bad = await updateProfile(store, reg.user.id, { avatar: 'av99' });
+    expect(bad.ok).toBe(false);
+    expect(bad.error).toBe('未知头像');
+
+    const set = await updateProfile(store, reg.user.id, { avatar: 'av3' });
+    expect(set.ok).toBe(true);
+    expect(set.user.avatar).toBe('av3');
+    expect(publicUser(set.user).avatar).toBe('av3');
+
+    const clear = await updateProfile(store, reg.user.id, { avatar: null });
+    expect(clear.ok).toBe(true);
+    expect(clear.user.avatar ?? null).toBeNull();
+
+    const empty = await updateProfile(store, reg.user.id, {});
+    expect(empty.ok).toBe(false);
+    expect(empty.error).toBe('没有可更新的字段');
   });
 
   it('用户名不区分大小写唯一', async () => {

@@ -13,6 +13,7 @@ function userFromRow(row) {
     passHash: row.pass_hash,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at ?? undefined,
+    avatar: row.avatar ?? undefined,
   };
 }
 
@@ -58,6 +59,26 @@ export function createD1Store(d1) {
           'INSERT INTO users (id, username, username_lower, pass_salt, pass_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         )
         .bind(user.id, user.username, user.username.toLowerCase(), user.passSalt, user.passHash, user.createdAt)
+        .run();
+    },
+
+    async updateUser(id, patch) {
+      // patch 仅允许 username/avatar 两个对外可改字段;username 同步写 username_lower。
+      const sets = [];
+      const values = [];
+      if (patch.username !== undefined) {
+        sets.push('username = ?', 'username_lower = ?');
+        values.push(patch.username, patch.username.toLowerCase());
+      }
+      if (patch.avatar !== undefined) {
+        sets.push('avatar = ?');
+        values.push(patch.avatar);
+      }
+      if (!sets.length) return;
+      values.push(id);
+      await d1
+        .prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`)
+        .bind(...values)
         .run();
     },
 

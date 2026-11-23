@@ -87,11 +87,12 @@ export async function listFriends(store, userId) {
     id: userId,
     username: self?.username ?? '(已注销)',
     online: isOnline(self?.lastSeenAt),
+    avatar: self?.avatar ?? null,
   };
   const friends = [
     {
       id: AI_ASSISTANT.id,
-      user: { id: AI_ASSISTANT.id, username: AI_ASSISTANT.username, online: true },
+      user: { id: AI_ASSISTANT.id, username: AI_ASSISTANT.username, online: true, avatar: AI_ASSISTANT.avatar },
       since: '',
       assistant: true,
     },
@@ -106,6 +107,7 @@ export async function listFriends(store, userId) {
       id: otherId,
       username: otherUser?.username ?? '(已注销)',
       online: isOnline(otherUser?.lastSeenAt),
+      avatar: otherUser?.avatar ?? null,
     };
     if (record.status === 'accepted') {
       friends.push({ id: record.id, user: other, since: record.respondedAt ?? record.createdAt });

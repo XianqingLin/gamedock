@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../state/auth';
 import { AuthDialog } from './AuthDialog';
+import { UserAvatar } from './UserAvatar';
 import type { AuthMode } from './AuthDialog';
 
 type Dialog = AuthMode | null;
@@ -62,16 +63,16 @@ export function UserArea() {
         aria-haspopup="true"
         title="用户菜单"
       >
-        <span className="user-avatar" aria-hidden="true">
-          {isUser ? (
-            user.username.slice(0, 1).toUpperCase()
-          ) : (
+        {isUser ? (
+          <UserAvatar user={user} />
+        ) : (
+          <span className="user-avatar" aria-hidden="true">
             <svg className="guest-avatar-icon" viewBox="0 0 32 32" fill="none">
               <circle cx="16" cy="11" r="5" fill="currentColor" />
               <path d="M6.5 27c.7-6 4.1-9 9.5-9s8.8 3 9.5 9" fill="currentColor" />
             </svg>
-          )}
-        </span>
+          </span>
+        )}
         <span className="user-name">{displayName}</span>
       </button>
 

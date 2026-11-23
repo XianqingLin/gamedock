@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
   pass_salt TEXT NOT NULL,
   pass_hash TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  last_seen_at TEXT
+  last_seen_at TEXT,
+  avatar TEXT
 );
 
 -- 内存实现里 users 是升序数组;D1 用 user_a < user_b 两列表达同一语义。

@@ -5,6 +5,7 @@
  * - getUserById(id) → user | null
  * - getUserByUsernameLower(lower) → user | null
  * - insertUser(user)
+ * - updateUser(id, patch)         // { username?, avatar? }
  * - getFriendship(id) → record | null
  * - getFriendshipBetween(userAId, userBId) → record | null
  * - listFriendshipsFor(userId) → [record]
@@ -15,7 +16,7 @@
  * - listChatMessages(userId, peerId, limit) → [record](时间正序,最近 limit 条)
  * - updateLastSeen(userId, isoTime)
  *
- * user 形状:{ id, username, passSalt, passHash, createdAt, lastSeenAt? }
+ * user 形状:{ id, username, passSalt, passHash, createdAt, lastSeenAt?, avatar? }
  * friendship 形状:{ id, users:[aId,bId](升序), status:'pending'|'accepted', requestedBy, createdAt, respondedAt? }
  * chatMessage 形状:{ id, userId, peerId, role:'user'|'assistant', content, createdAt }
  *
@@ -38,6 +39,13 @@ export function createMemoryStore() {
 
     async insertUser(user) {
       db.users.push(user);
+    },
+
+    async updateUser(id, patch) {
+      const user = db.users.find((u) => u.id === id);
+      if (!user) return;
+      if (patch.username !== undefined) user.username = patch.username;
+      if (patch.avatar !== undefined) user.avatar = patch.avatar;
     },
 
     async getFriendship(id) {

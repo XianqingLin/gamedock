@@ -99,6 +99,31 @@ describe('账号会话流程', () => {
     const me = await other.request('GET', '/api/auth/me');
     expect(me.data.user.username).toBe('other');
   });
+
+  it('PATCH /api/auth/profile:未登录 401;改名查重;头像校验;响应不含敏感字段', async () => {
+    const anon = makeClient();
+    expect((await anon.request('PATCH', '/api/auth/profile', { username: 'x' })).status).toBe(401);
+
+    const client = makeClient();
+    await client.request('POST', '/api/auth/register', { username: 'profiler', password: 'secret66' });
+    const other = makeClient();
+    await other.request('POST', '/api/auth/register', { username: 'taken_user', password: 'secret66' });
+
+    const dup = await client.request('PATCH', '/api/auth/profile', { username: 'taken_user' });
+    expect(dup.status).toBe(400);
+    expect(dup.data.error).toBe('用户名已存在');
+
+    const badAvatar = await client.request('PATCH', '/api/auth/profile', { avatar: 'av99' });
+    expect(badAvatar.status).toBe(400);
+    expect(badAvatar.data.error).toBe('未知头像');
+
+    const ok = await client.request('PATCH', '/api/auth/profile', { username: 'renamed', avatar: 'av2' });
+    expect(ok.status).toBe(200);
+    expect(ok.data.user.username).toBe('renamed');
+    expect(ok.data.user.avatar).toBe('av2');
+    expect(ok.data.user).not.toHaveProperty('passHash');
+    expect((await client.request('GET', '/api/auth/me')).data.user.username).toBe('renamed');
+  });
 });
 
 describe('好友 HTTP 流程', () => {
@@ -220,6 +245,27 @@ describe('存档 HTTP 流程', () => {
     const res = await client.request('GET', '/api/saves/no-such');
     expect(res.status).toBe(404);
     expect(res.data.error).toBe('未接入该游戏');
+  });
+
+  it('GET /api/saves 跨游戏聚合:按游戏分组、空游戏不出现、可未登录 401', async () => {
+    const anon = makeClient();
+    expect((await anon.request('GET', '/api/saves')).status).toBe(401);
+
+    const client = makeClient();
+    await client.request('POST', '/api/auth/register', { username: 'aggregator', password: 'secret66' });
+
+    const empty = await client.request('GET', '/api/saves');
+    expect(empty.status).toBe(200);
+    expect(empty.data.games).toEqual([]);
+
+    await client.request('PUT', '/api/saves/bvn/slotA', { value: 1 });
+    await client.request('PUT', '/api/saves/bvn/slotB', { value: 2 });
+    const all = await client.request('GET', '/api/saves');
+    expect(all.status).toBe(200);
+    const bvnGroup = all.data.games.find((g) => g.slug === 'bvn');
+    expect(bvnGroup.slots.map((s) => s.key).sort()).toEqual(['slotA', 'slotB']);
+    // 未写入过的游戏不出现
+    expect(all.data.games.some((g) => g.slug === 'no-data-game')).toBe(false);
   });
 });
 

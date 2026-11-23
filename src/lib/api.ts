@@ -2,11 +2,13 @@ export interface ApiUser {
   id: string;
   username: string;
   createdAt: string;
+  /** 系统预设头像编号(av0~av16);null = 未设置,渲染用户名首字母。 */
+  avatar: string | null;
 }
 
 export interface FriendEntry {
   id: string;
-  user: Pick<ApiUser, 'id' | 'username'> & { online?: boolean };
+  user: Pick<ApiUser, 'id' | 'username' | 'avatar'> & { online?: boolean };
   since: string;
   /** 固定 AI 助手(不可删除,点击打开聊天)。 */
   assistant?: boolean;
@@ -14,19 +16,19 @@ export interface FriendEntry {
 
 export interface IncomingRequestEntry {
   id: string;
-  from: Pick<ApiUser, 'id' | 'username'> & { online?: boolean };
+  from: Pick<ApiUser, 'id' | 'username' | 'avatar'> & { online?: boolean };
   createdAt: string;
 }
 
 export interface OutgoingRequestEntry {
   id: string;
-  to: Pick<ApiUser, 'id' | 'username'> & { online?: boolean };
+  to: Pick<ApiUser, 'id' | 'username' | 'avatar'> & { online?: boolean };
   createdAt: string;
 }
 
 export interface FriendLists {
   /** 当前登录用户自身状态,与好友共用同一份 last_seen_at 判定。 */
-  me: { id: string; username: string; online?: boolean };
+  me: { id: string; username: string; online?: boolean; avatar?: string | null };
   friends: FriendEntry[];
   incoming: IncomingRequestEntry[];
   outgoing: OutgoingRequestEntry[];
@@ -70,6 +72,9 @@ export const authApi = {
   login: (username: string, password: string) =>
     apiRequest<{ user: ApiUser }>('/api/auth/login', { method: 'POST', body: { username, password } }),
   logout: () => apiRequest<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
+  /** 资料更新:改用户名(= 登录名)与头像;avatar 传 null 恢复默认首字母头像。 */
+  updateProfile: (patch: { username?: string; avatar?: string | null }) =>
+    apiRequest<{ user: ApiUser }>('/api/auth/profile', { method: 'PATCH', body: patch }),
 };
 
 export const presenceApi = {
@@ -94,4 +99,22 @@ export const chatApi = {
       method: 'POST',
       body: { content },
     }),
+};
+
+export interface SaveSlotMeta {
+  key: string;
+  updatedAt: string | null;
+  size: number | null;
+}
+
+export interface SaveGameGroup {
+  slug: string;
+  slots: SaveSlotMeta[];
+}
+
+export const savesApi = {
+  /** 跨游戏聚合:列出当前用户在所有游戏的存档槽位元数据(只含非空游戏)。 */
+  listAll: () => apiRequest<{ games: SaveGameGroup[] }>('/api/saves'),
+  remove: (slug: string, key: string) =>
+    apiRequest<{ ok: true }>(`/api/saves/${encodeURIComponent(slug)}/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 };

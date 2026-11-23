@@ -7,7 +7,7 @@
  * 未配置或调用失败时明确报错,不伪造回复。
  */
 
-export const AI_ASSISTANT = { id: 'ai-xiaozhou', username: '小舟AI' };
+export const AI_ASSISTANT = { id: 'ai-xiaozhou', username: '小舟AI', avatar: 'av0' };
 
 const CONTENT_MAX = 2000;
 /** 返回给前端的历史条数上限。 */

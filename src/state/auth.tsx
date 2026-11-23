@@ -12,6 +12,8 @@ interface AuthContextValue {
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  /** 服务端确认后的本地身份同步(改名/换头像),不重置状态。 */
+  updateUser: (user: ApiUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,9 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('guest');
   }, []);
 
+  const updateUser = useCallback((next: ApiUser) => {
+    setUser(next);
+  }, []);
+
   const value = useMemo(
-    () => ({ status, user, login, register, logout, refresh }),
-    [status, user, login, register, logout, refresh],
+    () => ({ status, user, login, register, logout, refresh, updateUser }),
+    [status, user, login, register, logout, refresh, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

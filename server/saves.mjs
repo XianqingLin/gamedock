@@ -6,7 +6,7 @@ import { SEGMENT_RE, MAX_SLOTS_PER_GAME, DEFAULT_VALUE_LIMIT, fail, validSegment
  * 平台存档(fs 实现):按 (userId, slug, key) 存 JSON 值,文件落盘在 savesDir 下。
  * 值对平台不透明,格式由游戏自定义;last-write-wins。
  * 用户隔离靠路径段校验(三段均检查,无穿越风险)。
- * 接口同 store.mjs 风格;线上 KV 实现见 saves-kv.mjs。
+ * 接口同 store.mjs 风格:listSaves/listAllSaves/readSave/writeSave/deleteSave;线上 KV 实现见 saves-kv.mjs。
  */
 
 function slotFile(savesDir, userId, slug, key) {
@@ -17,6 +17,7 @@ function slotFile(savesDir, userId, slug, key) {
 export function createFsSaves(savesDir) {
   return {
     listSaves: (userId, slug) => listSaves(savesDir, userId, slug),
+    listAllSaves: (userId) => listAllSaves(savesDir, userId),
     readSave: (userId, slug, key) => readSave(savesDir, userId, slug, key),
     writeSave: (userId, slug, key, value, options) => writeSave(savesDir, userId, slug, key, value, options),
     deleteSave: (userId, slug, key) => deleteSave(savesDir, userId, slug, key),
@@ -53,6 +54,31 @@ export function listSaves(savesDir, userId, slug) {
   }
   slots.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
   return { ok: true, slug, slots };
+}
+
+/** 跨游戏聚合:列出某用户在所有游戏的存档槽位(只含非空游戏,最近有存档的游戏在前)。 */
+export function listAllSaves(savesDir, userId) {
+  if (!validSegment(userId)) return fail('非法参数');
+  let gameDirs;
+  try {
+    gameDirs = fs.readdirSync(path.join(savesDir, userId), { withFileTypes: true });
+  } catch {
+    return { ok: true, games: [] };
+  }
+
+  const games = [];
+  for (const entry of gameDirs) {
+    if (!entry.isDirectory() || !validSegment(entry.name)) continue;
+    const result = listSaves(savesDir, userId, entry.name);
+    if (!result.ok || !result.slots.length) continue;
+    games.push({ slug: entry.name, slots: result.slots });
+  }
+  games.sort((a, b) => {
+    const aTime = a.slots[0]?.updatedAt ?? '';
+    const bTime = b.slots[0]?.updatedAt ?? '';
+    return aTime < bTime ? 1 : -1;
+  });
+  return { ok: true, games };
 }
 
 /** 读取单个槽位。 */

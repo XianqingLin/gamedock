@@ -50,6 +50,40 @@ export function createKvSaves(kv) {
       return { ok: true, slug, slots };
     },
 
+    /** 跨游戏聚合:一次 KV list 前缀扫出全部槽位,按 slug 分组(只含非空游戏,最近在前)。 */
+    async listAllSaves(userId) {
+      if (!validSegment(userId)) return fail('非法参数');
+      let list;
+      try {
+        list = await kv.list({ prefix: `saves/${userId}/` });
+      } catch {
+        return fail('存档读取失败');
+      }
+      const prefix = `saves/${userId}/`;
+      const bySlug = new Map();
+      for (const item of list.keys) {
+        const rest = item.name.slice(prefix.length);
+        const slash = rest.indexOf('/');
+        if (slash <= 0) continue;
+        const slug = rest.slice(0, slash);
+        const key = rest.slice(slash + 1);
+        if (!validSegment(slug) || !validSegment(key)) continue;
+        const slots = bySlug.get(slug) ?? [];
+        slots.push({ key, updatedAt: item.metadata?.updatedAt ?? null, size: item.metadata?.size ?? null });
+        bySlug.set(slug, slots);
+      }
+      const games = [...bySlug.entries()].map(([slug, slots]) => {
+        slots.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+        return { slug, slots };
+      });
+      games.sort((a, b) => {
+        const aTime = a.slots[0]?.updatedAt ?? '';
+        const bTime = b.slots[0]?.updatedAt ?? '';
+        return aTime < bTime ? 1 : -1;
+      });
+      return { ok: true, games };
+    },
+
     /** 读取单个槽位;不存在返回失败。 */
     async readSave(userId, slug, key) {
       if (!validSegment(userId) || !validSegment(slug) || !validSegment(key)) {
