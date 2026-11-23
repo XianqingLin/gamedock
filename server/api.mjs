@@ -1,6 +1,5 @@
 import { registerUser, verifyLogin, publicUser, updateProfile } from './auth.mjs';
 import { sendFriendRequest, respondToRequest, cancelRequest, removeFriend, listFriends } from './friends.mjs';
-import { listGameInvites } from './invites.mjs';
 import { listChatMessages, sendChatMessage } from './chat.mjs';
 
 import {
