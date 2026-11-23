@@ -6,9 +6,9 @@ import {
   findUserByUsername,
   updateProfile,
   publicUser,
-} from './auth.mjs';
-import { hashPassword, verifyPassword } from './password.mjs';
-import { createMemoryStore } from './store.mjs';
+} from '../auth.mjs';
+import { hashPassword, verifyPassword } from '../password.mjs';
+import { createMemoryStore } from '../store.mjs';
 
 describe('validateRegistration 注册校验', () => {
   it('合法用户名:字母数字下划线中文,2-24 位', () => {

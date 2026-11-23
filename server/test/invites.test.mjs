@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { registerUser } from './auth.mjs';
-import { listFriends, respondToRequest, sendFriendRequest } from './friends.mjs';
-import { TEST_USER } from './bot.mjs';
+import { registerUser } from '../auth.mjs';
+import { listFriends, respondToRequest, sendFriendRequest } from '../friends.mjs';
+import { TEST_USER } from '../bot.mjs';
 import {
   acceptGameInvite,
   declineGameInvite,
   getGameInvite,
   listGameInvites,
   sendGameInvite,
-} from './invites.mjs';
-import { createMemoryStore } from './store.mjs';
+} from '../invites.mjs';
+import { createMemoryStore } from '../store.mjs';
 
 const gameSlugs = new Set(['bvn']);
 

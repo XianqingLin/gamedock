@@ -1,5 +1,5 @@
 -- GameDock D1 schema(用户 + 好友关系)。
--- 应用:wrangler d1 execute gamedock --file ./server/schema.sql(远程加 --remote)
+-- 应用:wrangler d1 execute gamedock --file ./server/migrations/schema.sql(远程加 --remote)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL,

@@ -1,5 +1,5 @@
 -- 存量库迁移:好友聊天 + 游戏邀请(2026-11-23)。
--- 应用:wrangler d1 execute gamedock --file ./server/migration-chat-invites.sql(远程加 --remote)
+-- 应用:wrangler d1 execute gamedock --file ./server/migrations/migration-chat-invites.sql(远程加 --remote)
 --
 -- 背景:聊天从「小舟AI」AI 助手会话(role user/assistant,单会话主人视角)
 -- 改为好友间双向聊天(from_id/to_id 对等)。旧 AI 聊天数据无保留价值,直接重建表;

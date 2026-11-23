@@ -9,14 +9,14 @@
 - 存储(2026-11-23):D1(用户/好友/聊天消息)、KV(玩家存档)、R2(游戏静态资源,bucket `gamedock-games`)。
 - 本地开发:`wrangler dev`(本地模拟 D1/KV/R2)+ vite 代理;测试向业务模块注入内存/fs 实现。
 
-好友间聊天与内置测试用户(2026-11-23,取代原「小舟AI」AI 助手聊天;外部 AI 依赖整体移除,`AI_API_*` vars/secret 不再使用,存量库执行 `server/migration-chat-invites.sql` 重建聊天表):
+好友间聊天与内置测试用户(2026-11-23,取代原「小舟AI」AI 助手聊天;外部 AI 依赖整体移除,`AI_API_*` vars/secret 不再使用,存量库执行 `server/migrations/migration-chat-invites.sql` 重建聊天表):
 
 - 聊天是好友间双向会话:D1 `chat_messages` 改 `{id, from_id, to_id, content, created_at}`(双向各存一条,对等);历史返回最多 100 条,前端打开聊天框期间每 4 秒轮询收新消息(无推送)。单条消息 ≤2000 字。
 - peer 校验:只能与已接受好友聊天(非好友 404「只能与好友聊天」;对自己发消息同样拒绝)。测试用户 bot 是真实 users 行(passSalt/passHash 占位,无法登录),注册与打开好友列表时幂等补建其好友关系;给 TA 发消息服务端追加一条固定回声式自动回复(引用原文截断 50 字),无外部 AI 调用。
 - bot 用户名「测试用户」为保留名(注册撞名报「用户名已存在」);bot 不可删除(removeFriend 明确报错)、不可被邀请。
 - 好友邀请(仅信息传递):D1 `game_invites` `{id, from_user, to_user, slug, params, status, created_at, responded_at}`;`POST /api/invites`(对方须为好友、slug 须已接入、params 为可选对象且值限 string/number/boolean、JSON ≤1KB,平台不解析)、`GET /api/invites`(接收方 pending 列表,并入 `GET /api/friends` 响应的 `invites` 字段)、`GET /api/invites/:id`(接收方取单条,任意状态——运行页刷新后可重取参数)、`POST /api/invites/:id/accept|decline`。
 - 邀请深链(platform-seam §4):运行页消费 `?invite=<id>`,把邀请 params 经握手 `join` 字段下发给游戏;游戏经 `game:invite-context` 上报当前可加入参数(形状同 params 校验,非法按 null 处理),GameFrame 暂存最新值供好友面板「邀请游玩」携带。SDK(`packages/game-sdk`) hello 增加 `join?: Record<string, unknown> | null`,`GameDockSdk.join` 原样暴露;SDK 改动后必须重新 `npm run build`(dist 被 bvn 以 file: 依赖硬链接引用)。
-- 在线状态(2026-11-23):来源为登录态浏览器的心跳——App 内 `PresenceHeartbeat` 登录后立即并每 60 秒(页面可见时)POST `/api/presence`,服务端写 `users.last_seen_at`;好友列表按 5 分钟窗口判定在线,无心跳一律离线,不编造。存量库执行 `server/migration-presence.sql`(加 `last_seen_at` 列),新建库直接用最新 `schema.sql`。
+- 在线状态(2026-11-23):来源为登录态浏览器的心跳——App 内 `PresenceHeartbeat` 登录后立即并每 60 秒(页面可见时)POST `/api/presence`,服务端写 `users.last_seen_at`;好友列表按 5 分钟窗口判定在线,无心跳一律离线,不编造。存量库执行 `server/migrations/migration-presence.sql`(加 `last_seen_at` 列),新建库直接用最新 `schema.sql`。
 - 平台不做联机的边界不变:聊天是平台社交功能,不是游戏内联机通道。
 
 

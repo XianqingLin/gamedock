@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handleGameAsset } from './game-assets.mjs';
+import { handleGameAsset } from '../game-assets.mjs';
 
 /**
  * 极简 R2 模拟:值可以是字符串(仅对象体)或 { body, contentType }(带元数据);

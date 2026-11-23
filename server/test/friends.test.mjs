@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { registerUser } from './auth.mjs';
-import { cancelRequest, listFriends, removeFriend, respondToRequest, sendFriendRequest } from './friends.mjs';
-import { TEST_USER } from './bot.mjs';
-import { createMemoryStore } from './store.mjs';
+import { registerUser } from '../auth.mjs';
+import { cancelRequest, listFriends, removeFriend, respondToRequest, sendFriendRequest } from '../friends.mjs';
+import { TEST_USER } from '../bot.mjs';
+import { createMemoryStore } from '../store.mjs';
 
 async function setup() {
   const store = createMemoryStore();

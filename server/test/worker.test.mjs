@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import worker from './worker.mjs';
+import worker from '../worker.mjs';
 
 /** 与 game-assets.test.mjs 相同的最小 R2 模拟(只覆盖 worker 路由测试所需)。 */
 function createR2Mock(objects) {

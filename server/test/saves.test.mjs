@@ -2,10 +2,10 @@ import { afterAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { handleApi } from './api.mjs';
-import { createMemoryStore } from './store.mjs';
-import { createFsSaves } from './saves.mjs';
-import gamesData from '../src/data/games.json' with { type: 'json' };
+import { handleApi } from '../api.mjs';
+import { createMemoryStore } from '../store.mjs';
+import { createFsSaves } from '../saves.mjs';
+import gamesData from '../../src/data/games.json' with { type: 'json' };
 
 // 临时数据目录(存档落盘),避免污染真实目录。
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gamedock-saves-test-'));
