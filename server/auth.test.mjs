@@ -47,6 +47,16 @@ describe('registerUser / verifyLogin', () => {
     expect(wrong.error).toBe(missing.error);
   });
 
+  it('用户 ID 为 7-8 位数字,多次注册不重复', async () => {
+    const store = createMemoryStore();
+    const a = await registerUser(store, { username: 'player_a', password: 'secret66' });
+    const b = await registerUser(store, { username: 'player_b', password: 'secret66' });
+    expect(a.ok && b.ok).toBe(true);
+    expect(a.user.id).toMatch(/^\d{7,8}$/);
+    expect(b.user.id).toMatch(/^\d{7,8}$/);
+    expect(a.user.id).not.toBe(b.user.id);
+  });
+
   it('用户名不区分大小写唯一', async () => {
     const store = createMemoryStore();
     await registerUser(store, { username: 'PlayerOne', password: 'secret66' });
