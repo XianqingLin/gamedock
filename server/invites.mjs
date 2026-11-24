@@ -6,7 +6,11 @@
  * 接收方在好友列表顶部看到邀请行:进入(标记 accepted → 打开运行页,参数经
  * postMessage 握手交给游戏)或 忽略(标记 declined)。平台不参与连接建立。
  *
- * 记录形状:{ id, fromUser, toUser, slug, params(object|null), status:'pending'|'accepted'|'declined', createdAt, respondedAt? }
+ * params 一次性投递(2026-11-24):运行页首次取参即标记 delivered_at 并返回 params,
+ * 之后再取 params 为 null——原「任意状态可重取(刷新恢复)」会把游戏侧已销的票复活
+ * (邀请票模型:bvn 兑票/忽略即销票,刷新恢复由游戏侧票自持,见 platform-seam §4)。
+ *
+ * 记录形状:{ id, fromUser, toUser, slug, params(object|null), status:'pending'|'accepted'|'declined', createdAt, respondedAt?, deliveredAt? }
  */
 import { TEST_USER } from './bot.mjs';
 
@@ -114,10 +118,19 @@ export async function declineGameInvite(store, userId, inviteId) {
   return { ok: true };
 }
 
-/** 运行页取邀请:params 仅接收方可见(任意状态,刷新后可重新拿到加入参数)。 */
+/** 运行页取邀请:params 仅接收方可见;一次性投递(见模块头)——首次取参标记
+ *  delivered_at 并返回 params,之后再取 params 为 null(游戏侧票自持刷新恢复)。 */
 export async function getGameInvite(store, userId, inviteId) {
   const invite = await store.getInvite(inviteId);
   if (!invite || invite.toUser !== userId) return fail('邀请不存在');
+  let params = invite.params;
+  if (!invite.deliveredAt) {
+    // 首次取参 = 投递。此后刷新/重开运行页不再下发,防止已销的票被复活。
+    const deliveredAt = new Date().toISOString();
+    await store.updateInvite(invite.id, { deliveredAt });
+  } else {
+    params = null;
+  }
   const from = await store.getUserById(invite.fromUser);
   return {
     ok: true,
@@ -125,7 +138,7 @@ export async function getGameInvite(store, userId, inviteId) {
       id: invite.id,
       from: { id: invite.fromUser, username: from?.username ?? '(已注销)' },
       slug: invite.slug,
-      params: invite.params,
+      params,
       status: invite.status,
     },
   };

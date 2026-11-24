@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_pair ON chat_messages (from_id, to_id);
 
--- 好友邀请(仅信息传递;params 为游戏自定义参数的 JSON 序列化,平台不解析)。
+-- 好友邀请(仅信息传递;params 为游戏自定义参数的 JSON 序列化,平台不解析;
+-- delivered_at = 运行页首次取参时刻,params 一次性投递)。
 CREATE TABLE IF NOT EXISTS game_invites (
   id TEXT PRIMARY KEY,
   from_user TEXT NOT NULL,
@@ -46,7 +47,8 @@ CREATE TABLE IF NOT EXISTS game_invites (
   params TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'declined')),
   created_at TEXT NOT NULL,
-  responded_at TEXT
+  responded_at TEXT,
+  delivered_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_game_invites_to ON game_invites (to_user, status);

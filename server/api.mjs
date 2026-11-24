@@ -304,7 +304,7 @@ async function handleChatApi(ctx, pathname) {
  * 好友邀请(仅信息传递):
  * - POST /api/invites {to, slug, params}:发出邀请(对方须为好友;params 为游戏透传参数)
  * - GET /api/invites:接收方的待处理邀请列表
- * - GET /api/invites/:id:接收方取单条(运行页拿 params;刷新可重取)
+ * - GET /api/invites/:id:接收方取单条(运行页拿 params;一次性投递,重取 params 为 null)
  * - POST /api/invites/:id/accept:接收方「进入」
  * - POST /api/invites/:id/decline:接收方「忽略」
  */

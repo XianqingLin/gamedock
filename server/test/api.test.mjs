@@ -180,6 +180,63 @@ describe('好友 HTTP 流程', () => {
   });
 });
 
+describe('游戏邀请 HTTP 流程', () => {
+  let inviteSeq = 0;
+  /** 建对好友并发出邀请,返回接收方会话与邀请 id(从接收方待处理列表取)。 */
+  async function makeInvite() {
+    const tag = `i${++inviteSeq}`;
+    const a = makeClient();
+    const b = makeClient();
+    await a.request('POST', '/api/auth/register', { username: `inviter${tag}`, password: 'secret66' });
+    await b.request('POST', '/api/auth/register', { username: `invitee${tag}`, password: 'secret66' });
+    const inviteeId = (await b.request('GET', '/api/auth/me')).data.user.id;
+    await a.request('POST', '/api/friends/requests', { id: inviteeId });
+    const requestId = (await b.request('GET', '/api/friends')).data.incoming[0].id;
+    await b.request('POST', `/api/friends/requests/${requestId}/accept`);
+    const sent = await a.request('POST', '/api/invites', {
+      to: inviteeId,
+      slug: 'bvn',
+      params: { room: '123456', node: 'cn' },
+    });
+    expect(sent.status).toBe(200);
+    const inviteId = (await b.request('GET', '/api/friends')).data.invites[0].id;
+    return { b, inviteId };
+  }
+
+  it('运行页取参一次性投递:首次返回 params,刷新重取 params 为 null', async () => {
+    const { b, inviteId } = await makeInvite();
+
+    // 首次取参(运行页挂载投递):params 原样返回
+    const first = await b.request('GET', `/api/invites/${inviteId}`);
+    expect(first.status).toBe(200);
+    expect(first.data.invite.params).toEqual({ room: '123456', node: 'cn' });
+
+    // 模拟刷新重取:不再下发(游戏侧票自持恢复,平台重发会复活已销的票)
+    const second = await b.request('GET', `/api/invites/${inviteId}`);
+    expect(second.status).toBe(200);
+    expect(second.data.invite.params).toBeNull();
+  });
+
+  it('非接收方取参拒绝;未接入游戏拒绝', async () => {
+    const { b, inviteId } = await makeInvite();
+    const stranger = makeClient();
+    await stranger.request('POST', '/api/auth/register', { username: 'stranger', password: 'secret66' });
+    expect((await stranger.request('GET', `/api/invites/${inviteId}`)).status).toBe(404);
+    expect((await b.request('GET', `/api/invites/nonexistent`)).status).toBe(404);
+
+    const a = makeClient();
+    await a.request('POST', '/api/auth/register', { username: 'sender2', password: 'secret66' });
+    const friend = makeClient();
+    await friend.request('POST', '/api/auth/register', { username: 'friend2', password: 'secret66' });
+    const friendId = (await friend.request('GET', '/api/auth/me')).data.user.id;
+    await a.request('POST', '/api/friends/requests', { id: friendId });
+    const reqId = (await friend.request('GET', '/api/friends')).data.incoming[0].id;
+    await friend.request('POST', `/api/friends/requests/${reqId}/accept`);
+    const badSlug = await a.request('POST', '/api/invites', { to: 'friend2', slug: 'no-game', params: null });
+    expect(badSlug.status).toBe(400);
+  });
+});
+
 describe('在线心跳与好友在线状态', () => {
   it('未登录拒绝;心跳后的好友在好友列表中显示在线', async () => {
     const anon = await call('POST', '/api/presence');

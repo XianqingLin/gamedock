@@ -26,6 +26,8 @@ export function makeFakeApi() {
     slug: string;
     params: Record<string, unknown> | null;
     status: 'pending' | 'accepted' | 'declined';
+    /** 运行页是否已取过参(一次性投递标记,镜像服务端 delivered_at)。 */
+    delivered?: boolean;
   }[] = [];
   let currentUserId: string | null = null;
   let seq = 0;
@@ -282,10 +284,14 @@ export function makeFakeApi() {
         if (!currentUserId) return json({ error: '需要登录' }, 401);
         const invite = invites.find((i) => i.id === inviteGet[1]);
         if (!invite || invite.toUser !== currentUserId) return json({ error: '邀请不存在' }, 404);
+        // 与服务端 invites.mjs 同语义:params 一次性投递——首次取参返回并标记
+        // delivered,之后 params 为 null(刷新恢复由游戏侧邀请票自持)。
+        const firstDelivery = !invite.delivered;
+        invite.delivered = true;
         return json({
           invite: {
             slug: invite.slug,
-            params: invite.params,
+            params: firstDelivery ? invite.params : null,
           },
         });
       }

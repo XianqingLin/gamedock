@@ -59,6 +59,7 @@ function inviteFromRow(row) {
     status: row.status,
     createdAt: row.created_at,
     respondedAt: row.responded_at ?? undefined,
+    deliveredAt: row.delivered_at ?? undefined,
   };
 }
 
@@ -212,11 +213,18 @@ export function createD1Store(d1) {
     },
 
     async updateInvite(id, patch) {
-      if (patch.status === undefined) return;
-      await d1
-        .prepare('UPDATE game_invites SET status = ?, responded_at = ? WHERE id = ?')
-        .bind(patch.status, patch.respondedAt ?? null, id)
-        .run();
+      if (patch.status !== undefined) {
+        await d1
+          .prepare('UPDATE game_invites SET status = ?, responded_at = ? WHERE id = ?')
+          .bind(patch.status, patch.respondedAt ?? null, id)
+          .run();
+      }
+      if (patch.deliveredAt !== undefined) {
+        await d1
+          .prepare('UPDATE game_invites SET delivered_at = ? WHERE id = ?')
+          .bind(patch.deliveredAt, id)
+          .run();
+      }
     },
 
     async updateLastSeen(userId, isoTime) {

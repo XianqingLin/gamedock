@@ -17,7 +17,7 @@
  * - insertInvite(record)
  * - getInvite(id) → record | null
  * - listPendingInvitesFor(toUserId) → [record](时间正序)
- * - updateInvite(id, patch)      // { status?, respondedAt? }
+ * - updateInvite(id, patch)      // { status?, respondedAt?, deliveredAt? }
  * - updateLastSeen(userId, isoTime)
  *
  * user 形状:{ id, username, passSalt, passHash, createdAt, lastSeenAt?, avatar? }

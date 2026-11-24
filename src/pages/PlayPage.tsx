@@ -17,8 +17,9 @@ import { UserArea } from '../components/UserArea';
  * 游戏逻辑全部在 iframe 内。仅站内游戏经由此页；外链游戏在详情页直接新窗口打开。
  *
  * 邀请深链(2026-11-23):好友点「进入」打开 ?invite=<id>,运行页取回该邀请的
- * 游戏自定义参数,经 hello 的 join 字段交给游戏(平台只透传、不解析);
- * 刷新后重取,参数可重复下发(游戏按自身状态决定是否再次入房)。
+ * 游戏自定义参数,经 hello 的 join 字段交给游戏(平台只透传、不解析)。
+ * 取参一次性投递(2026-11-24):首次取参即下发,之后(params null)不再重发——
+ * 刷新恢复由游戏侧邀请票自持(票存游戏 localStorage),平台重发会复活已销的票。
  */
 export function PlayPage() {
   const { slug } = useParams();
