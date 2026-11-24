@@ -9,8 +9,10 @@
   "routes": [
     { "pattern": "gamedock.cn", "custom_domain": true },
     { "pattern": "www.gamedock.cn", "custom_domain": true },
-    // 游戏内容域:游戏静态资源(R2),与平台跨源隔离;部署时自动创建 DNS 记录。
-    { "pattern": "games.gamedock.cn", "custom_domain": true }
+    // 游戏内容域源站名:QEdgeCdn 前置加速时公开域名 games.gamedock.cn 在 zone 里是
+    // 灰云 CNAME(指向 QEdge),Worker 自定义域只能绑这个源站名;QEdge 回源 Host 指向它。
+    // 部署时自动创建 DNS 记录。
+    { "pattern": "origin-games.gamedock.cn", "custom_domain": true }
   ],
   "assets": {
     "directory": "./dist",

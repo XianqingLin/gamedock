@@ -28,6 +28,12 @@ describe('worker 路由分流', () => {
     expect(await res.text()).toBe('<html>bvn</html>');
   });
 
+  it('游戏内容域源站名(QEdge 回源 Host)同样 → R2 静态资源', async () => {
+    const res = await worker.fetch(new Request('https://origin-games.gamedock.cn/g/bvn/index.html'), { GAMES, ASSETS });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('<html>bvn</html>');
+  });
+
   it('游戏内容域根路径 → 404(不托管平台 SPA)', async () => {
     const res = await worker.fetch(new Request('https://games.gamedock.cn/'), { GAMES, ASSETS });
     expect(res.status).toBe(404);

@@ -1,6 +1,7 @@
 /**
  * GameDock Worker 入口(Cloudflare Workers)。
- * - 游戏内容域(games.gamedock.cn):全部请求 → R2 静态资源(handleGameAsset)。
+ * - 游戏内容域(games.gamedock.cn 及其源站名 origin-games.gamedock.cn,QEdge 回源):
+ *   全部请求 → R2 静态资源(handleGameAsset)。
  *   游戏与平台跨源隔离:平台会话 Cookie 为 host-only,不会进入游戏域。
  * - 主域(gamedock.cn / www):
  *   - /api/*:平台 API(handleApi,D1 存用户/好友,KV 存玩家存档);
@@ -15,8 +16,10 @@ import { handleGameAsset } from './game-assets.mjs';
 import { createD1Store } from './store-d1.mjs';
 import { createKvSaves } from './saves-kv.mjs';
 
-/** 游戏内容域:与 wrangler.jsonc 的 routes 保持一致(不导出,Workers 入口只允许 default)。 */
+/** 游戏内容域公开域名(浏览器侧,与 CORS 白名单/301 跳转一致)。 */
 const GAME_HOST = 'games.gamedock.cn';
+// 游戏内容域各主机名:公开域名 + 源站名(QEdge 回源 Host;与 wrangler.jsonc routes 保持一致)。
+const GAME_HOSTS = new Set([GAME_HOST, 'origin-games.gamedock.cn']);
 const PLATFORM_HOSTS = new Set(['gamedock.cn', 'www.gamedock.cn']);
 
 const gameSlugs = new Set(Object.keys(gamesConfig));
@@ -29,7 +32,10 @@ function jsonResponse(status, message) {
 }
 
 function isGameHost(hostname) {
-  return hostname === GAME_HOST || hostname.endsWith(`.${GAME_HOST}`);
+  for (const host of GAME_HOSTS) {
+    if (hostname === host || hostname.endsWith(`.${host}`)) return true;
+  }
+  return false;
 }
 
 export default {

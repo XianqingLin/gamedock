@@ -26,6 +26,7 @@
 
 - 主域 `gamedock.cn` / `www`:Static Assets 托管 SPA;`/api/*` 业务 API;`/g/*` 生产 301 到内容域。
 - 内容域 `games.gamedock.cn`:R2 托管游戏静态资源,key `g/<slug>/<路径>` 与 URL 一一对应;目录路径回退 `index.html`。
+- 内容域前置 QEdgeCdn 免备案亚太 CDN(2026-11-24,运维细节与回退开关在工作区 `../docs/SERVER-OPS.md`):公开域名在 zone 里是灰云 CNAME 指向 QEdge,Worker 自定义域绑源站名 `origin-games.gamedock.cn`(worker 按两个主机名同样分流到 R2,回源 Host 必须显式设为源站名);主域与房间服 `bvn.gamedock.cn` 不经 CDN。
 - 会话 Cookie 为 host-only + SameSite=Lax(生产 Secure),不进游戏域;`/api` CORS 仅放行内容域与请求自身源(带凭据)。
 - 平台发布 = `npm run deploy`;游戏发布 = `node scripts/sync-games.mjs`(`--local` 喂本地模拟)。平台构建不接触游戏产物;sync 先传普通文件、最后写各游戏 `index.html`。
 - 本地 dev 陷阱:`wrangler dev` 配置自定义域后会把请求 URL 的 host 重写为第一个自定义域,生产判定以 https 协议为准,游戏域分支靠单测覆盖。
