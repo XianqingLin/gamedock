@@ -40,11 +40,15 @@ export function PlayPage() {
   }, []);
 
   // 邀请深链:登录态就绪后取邀请(仅接收方可见),拿回参数随 hello 下发。
+  // joinParams 三态:undefined=取参中 / null=无邀请 / 对象=参数。游客期先挂过
+  // iframe(null)再登录时,重置回取参中让 iframe 等 join 就绪后重挂——游戏侧 SDK
+  // 只认首个 hello,带着旧 null 定格会让邀请参数丢失(2026-11-24 修复取参竞速)。
   useEffect(() => {
     if (!inviteId || status !== 'user') {
       setJoinParams(null);
       return;
     }
+    setJoinParams(undefined);
     let cancelled = false;
     friendsApi
       .getInvite(inviteId)
@@ -127,9 +131,11 @@ export function PlayPage() {
     );
   }
 
-  // 登录态确认前不挂 iframe:hello 握手会携带 user,auth 未就绪时下发 null
-  // 会被游戏侧 SDK 定格（游戏只认首个 hello,后续补发不更新）。
-  if (status === 'loading') {
+  // 登录态确认前 / 邀请取参未就绪前不挂 iframe:hello 握手会携带 user/join,
+  // 未就绪时下发 null 会被游戏侧 SDK 定格(游戏只认首个 hello,后续补发不更新)。
+  // 邀请取参是异步请求(2026-11-24 修复竞速):先挂后取参会以 join=null 定格,
+  // 邀请参数丢失,故取参期间同样显示加载态。
+  if (status === 'loading' || joinParams === undefined) {
     return (
       <div className="page play-page">
         <main className="empty-wrap">

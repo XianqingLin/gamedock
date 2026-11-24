@@ -14,7 +14,7 @@
 
 ## 游戏侧现状（2026-11-23 校准）
 
-- **web-bvn**:对局调度 rollback(bvn DESIGN §6),房间服 = BCC 国内节点 + CF Durable Object 外服节点双节点(操作见工作区 `docs/SERVER-OPS.md`);平台中转"方案 A"残留已删除。**切片 38 邀请部分已落地**(2026-11-23):游戏入房成功上报 `game:invite-context {room, node}`、hello `join` 参数消费(自动入房,等价深链);剩余 = 身份凭证服务器侧校验与平台昵称/头像资料接入(见 platform-seam.md §3/§5)。
+- **web-bvn**:对局调度 rollback(bvn DESIGN §6),房间服 = BCC 国内节点 + CF Durable Object 外服节点双节点(操作见工作区 `docs/SERVER-OPS.md`);平台中转"方案 A"残留已删除。**邀请链已落地**(2026-11-23 深链,2026-11-24 收口为邀请票):游戏入房成功上报 `game:invite-context {room, node}`、hello `join` 参数存为邀请票(主菜单挂卡,点击才入房,不再自动加入——bvn DESIGN §6.4);剩余 = 身份凭证服务器侧校验与平台昵称/头像资料接入(见 platform-seam.md §3/§5)。
 
 ## 与联机无关、继续有效的契约
 
