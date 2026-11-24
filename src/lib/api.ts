@@ -35,6 +35,13 @@ export interface GameInviteEntry {
   createdAt: string;
 }
 
+/** 发起方回执:我发出的邀请被拒绝(通知端点下发,前端按 id 去重只提示一次)。 */
+export interface InviteResponseEntry {
+  id: string;
+  to: { id: string; username: string };
+  respondedAt: string;
+}
+
 export interface FriendLists {
   /** 当前登录用户自身状态,与好友共用同一份 last_seen_at 判定。 */
   me: { id: string; username: string; online?: boolean; avatar?: string | null };
@@ -110,11 +117,17 @@ export const friendsApi = {
     apiRequest<{ ok: true }>('/api/invites', { method: 'POST', body: { to, slug, params } }),
   respondInvite: (inviteId: string, accept: boolean) =>
     apiRequest<{ ok: true }>(`/api/invites/${inviteId}/${accept ? 'accept' : 'decline'}`, { method: 'POST' }),
-  /** 运行页取邀请(任意状态;刷新后可重取加入参数)。 */
+  /** 运行页取邀请(接收方;params 一次性投递,重取为 null)。 */
   getInvite: (inviteId: string) =>
     apiRequest<{ invite: { slug: string; params: Record<string, unknown> | null } }>(
       `/api/invites/${encodeURIComponent(inviteId)}`,
     ),
+  /**
+   * 通知端点(全站轻轮询):接收方 pending 邀请 + 我发出的邀请的拒绝回执。
+   * 右下角 Toast 队列、好友入口角标与拒绝回执提示都由它驱动(无推送通道)。
+   */
+  notifications: () =>
+    apiRequest<{ invites: GameInviteEntry[]; responses: InviteResponseEntry[] }>('/api/friends/notifications'),
 };
 
 

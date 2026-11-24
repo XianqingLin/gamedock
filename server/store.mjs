@@ -17,13 +17,14 @@
  * - insertInvite(record)
  * - getInvite(id) → record | null
  * - listPendingInvitesFor(toUserId) → [record](时间正序)
+ * - listInvitesFromWithStatus(fromUserId, status) → [record](时间正序,发起方回执用)
  * - updateInvite(id, patch)      // { status?, respondedAt?, deliveredAt? }
  * - updateLastSeen(userId, isoTime)
  *
  * user 形状:{ id, username, passSalt, passHash, createdAt, lastSeenAt?, avatar? }
  * friendship 形状:{ id, users:[aId,bId](升序), status:'pending'|'accepted', requestedBy, createdAt, respondedAt? }
  * chatMessage 形状:{ id, fromId, toId, content, createdAt }(好友间双向,各存一条)
- * invite 形状:{ id, fromUser, toUser, slug, params(object|null), status:'pending'|'accepted'|'declined', createdAt, respondedAt? }
+ * invite 形状:{ id, fromUser, toUser, slug, params(object|null), status:'pending'|'accepted'|'declined'|'superseded', createdAt, respondedAt? }
  *
  * 本文件提供内存实现:测试与纯内存场景用;线上见 store-d1.mjs(D1)。
  */
@@ -102,6 +103,10 @@ export function createMemoryStore() {
 
     async listPendingInvitesFor(toUserId) {
       return db.invites.filter((r) => r.toUser === toUserId && r.status === 'pending');
+    },
+
+    async listInvitesFromWithStatus(fromUserId, status) {
+      return db.invites.filter((r) => r.fromUser === fromUserId && r.status === status);
     },
 
     async updateInvite(id, patch) {

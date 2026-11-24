@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { friendsApi } from '../lib/api';
 import type { FriendEntry, FriendLists, GameInviteEntry } from '../lib/api';
 import { GAMES } from '../data';
@@ -32,7 +33,8 @@ export interface CurrentGameContext {
  * 好友行交互(2026-11-23):双击(或键盘 Enter/Space)打开聊天框;右键(键盘 Menu/Shift+F10)
  * 弹出操作菜单——发送消息 / 邀请游玩(仅正在游玩某游戏时提供,主站抽屉不显示) / 删除好友(二次确认);
  * 固定测试用户 bot 在列表首位:只有「发送消息」,不可删除、不可被邀请。
- * 待处理的游戏邀请以固定邀请行展示在主列表顶部:「进入」打开运行页(经邀请深链),「忽略」丢弃。
+ * 待处理的游戏邀请内联在对应好友行的右侧:文字「邀请你玩 XX」在上、接受/拒绝两钮在文字正下方;
+ * 同一邀请者的多次邀请新覆盖旧(服务端 superseded + 客户端按人去重);没有独立的顶部邀请行。
  * 好友在线状态来自真实心跳(/api/presence),由服务端统一判定(自身身份区显示 ID 而非在线状态)。
  * 面板底部提供退出登录;游客态在面板内提供登录/注册入口。
  * 所有操作失败都以服务端错误文案展示,不假装成功。
@@ -46,6 +48,7 @@ export function FriendsPanel({
   currentGame?: CurrentGameContext;
 }) {
   const { status, user, logout } = useAuth();
+  const navigate = useNavigate();
   const [lists, setLists] = useState<FriendLists | null>(null);
   const [input, setInput] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
@@ -161,6 +164,14 @@ export function FriendsPanel({
   const visibleFriends = lists?.friends.filter(
     (entry) => !keyword || entry.user.username.toLowerCase().includes(keyword),
   );
+  // 邀请按邀请者归位到好友行(服务端已把同源旧邀请置为 superseded,这里再按人保最新兜底)。
+  const inviteByFriend = new Map<string, GameInviteEntry>();
+  for (const invite of lists?.invites ?? []) {
+    const existing = inviteByFriend.get(invite.from.id);
+    if (!existing || Date.parse(invite.createdAt) > Date.parse(existing.createdAt)) {
+      inviteByFriend.set(invite.from.id, invite);
+    }
+  }
 
   const submitAdd = (event: React.FormEvent) => {
     event.preventDefault();
@@ -198,10 +209,17 @@ export function FriendsPanel({
     setActionError(null);
     setBusy(true);
     if (accept) {
-      // 先标记 accepted,再新窗口打开运行页(?invite= 深链,运行页据此把参数经 hello 交给游戏)。
+      // 接受即自动入房:先标记 accepted,再进运行页(?invite= 深链)——
+      // 已在本页游玩同一游戏则原地换 ?invite= 重挂 iframe(GameFrame 按 inviteId 重挂重新握手),
+      // 否则新窗口打开;之后由游戏侧落主菜单自动入房,游戏内无任何邀请 UI。
       friendsApi
         .respondInvite(invite.id, true)
         .then(() => {
+          if (currentGame?.slug === invite.slug) {
+            navigate(`/play/${invite.slug}?invite=${encodeURIComponent(invite.id)}`);
+            onClose();
+            return friendsApi.list();
+          }
           window.open(`/play/${invite.slug}?invite=${encodeURIComponent(invite.id)}`, '_blank', 'noopener,noreferrer');
           return friendsApi.list();
         })
@@ -384,49 +402,14 @@ export function FriendsPanel({
             </div>
           ) : (
             <ul className="friends-list">
-              {lists.invites.length > 0 && (
-                <li className="friend-invites-caption" aria-hidden="true">
-                  <span />
-                  邀请
-                  <span />
-                </li>
-              )}
-              {lists.invites.map((invite) => (
-                <li key={invite.id} className="friend-item friend-invite">
-                  <FriendIdentity name={invite.from.username} avatar={invite.from.avatar} large />
-                  <span className="friend-invite-label">
-                    <span>邀请你游玩</span>
-                    <span className="friend-invite-game">{gameTitle(invite.slug)}</span>
-                  </span>
-
-                  <span className="friend-row-actions">
-                    <button
-                      type="button"
-                      className="friend-action-btn friend-action-accept"
-                      aria-label={`接受 ${invite.from.username} 的游玩邀请`}
-                      disabled={busy}
-                      onClick={() => respondInvite(invite, true)}
-                    >
-                      <IconCheck />
-                    </button>
-                    <button
-                      type="button"
-                      className="friend-action-btn friend-action-decline"
-                      aria-label={`忽略 ${invite.from.username} 的游玩邀请`}
-                      disabled={busy}
-                      onClick={() => respondInvite(invite, false)}
-                    >
-                      <IconClose />
-                    </button>
-                  </span>
-                </li>
-              ))}
               {visibleFriends?.map((entry) => (
                 <FriendRow
                   key={entry.id}
                   entry={entry}
+                  invite={inviteByFriend.get(entry.user.id)}
                   busy={busy}
                   onOpenChat={openChat}
+                  onRespond={respondInvite}
                   onMenu={(x, y) => setMenu({ entry, x, y })}
                 />
 
@@ -515,8 +498,11 @@ function gameTitle(slug: string): string {
 
 interface FriendRowProps {
   entry: FriendEntry;
+  /** 该好友发来的待处理邀请(无则行右侧不显示邀请区)。 */
+  invite?: GameInviteEntry;
   busy: boolean;
   onOpenChat: (entry: FriendEntry) => void;
+  onRespond: (invite: GameInviteEntry, accept: boolean) => void;
   /** 右键/菜单键回调(菜单项集合由面板按游玩上下文决定,含删除入口的二次确认)。 */
   onMenu: (x: number, y: number) => void;
 }
@@ -525,9 +511,9 @@ interface FriendRowProps {
 /**
  * 好友行:双击/Enter/Space 打开聊天框;右键或键盘菜单键弹出操作菜单。
  * bot 行只有聊天入口(菜单仅「发送消息」);普通好友菜单含删除(带二次确认)。
- * 菜单项集合由面板按游玩上下文决定(hasGameContext 只影响菜单,不影响行本身)。
+ * 有待处理邀请时行右侧内联邀请区:文字「邀请你玩 XX」在上、接受/拒绝两钮在文字正下方。
  */
-function FriendRow({ entry, busy, onOpenChat, onMenu }: FriendRowProps) {
+function FriendRow({ entry, invite, busy, onOpenChat, onRespond, onMenu }: FriendRowProps) {
 
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -561,6 +547,31 @@ function FriendRow({ entry, busy, onOpenChat, onMenu }: FriendRowProps) {
       >
         <FriendIdentity name={entry.user.username} avatar={entry.user.avatar} online={entry.user.online} large />
       </button>
+      {invite && (
+        <span className="friend-invite-side">
+          <span className="friend-invite-text">邀请你玩 {gameTitle(invite.slug)}</span>
+          <span className="friend-row-actions">
+            <button
+              type="button"
+              className="friend-action-btn friend-action-accept"
+              aria-label={`接受 ${invite.from.username} 的游玩邀请`}
+              disabled={busy}
+              onClick={() => onRespond(invite, true)}
+            >
+              <IconCheck />
+            </button>
+            <button
+              type="button"
+              className="friend-action-btn friend-action-decline"
+              aria-label={`拒绝 ${invite.from.username} 的游玩邀请`}
+              disabled={busy}
+              onClick={() => onRespond(invite, false)}
+            >
+              <IconClose />
+            </button>
+          </span>
+        </span>
+      )}
       {entry.bot && <span className="friend-row-tag">测试</span>}
     </li>
   );

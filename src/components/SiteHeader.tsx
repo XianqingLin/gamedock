@@ -4,6 +4,7 @@ import { SocialSidebar } from './SocialSidebar';
 import { UserArea } from './UserArea';
 import { SearchBar } from './SearchBar';
 import { useBackToParent } from '../lib/navStack';
+import { useInviteHub } from '../state/invites';
 
 /**
  * 右侧工作区顶栏：返回按钮、搜索框与「探索/浏览」导航居左,账号入口(即好友栏入口)居右。
@@ -11,6 +12,7 @@ import { useBackToParent } from '../lib/navStack';
  * 返回按钮为层级式：详情页的上级是浏览页——后退至历史中最近的浏览页位置
  * （跳过运行页等非上级页面），历史中没有浏览页时直达浏览页；
  * 探索、浏览等顶级页面无上级，按钮呈禁用态。
+ * 邀请 Toast 点击经 InviteHub 的 openRequest 计数打开本抽屉(不经过头像钮)。
  */
 export function SiteHeader() {
   const navigate = useNavigate();
@@ -20,6 +22,15 @@ export function SiteHeader() {
   const [input, setInput] = useState(params.get('q') ?? '');
   const [socialOpen, setSocialOpen] = useState(false);
   const closeSocial = useCallback(() => setSocialOpen(false), []);
+  const { openRequest, markInvitesViewed } = useInviteHub();
+
+  // Toast 点击打开抽屉;抽屉打开即视为邀请已读(角标清零)。
+  useEffect(() => {
+    if (openRequest > 0) setSocialOpen(true);
+  }, [openRequest]);
+  useEffect(() => {
+    if (socialOpen) markInvitesViewed();
+  }, [socialOpen, markInvitesViewed]);
 
   // 层级式上级：目前只有游戏详情页有上级（浏览页）。
   const parent = /^\/games\/[^/]+$/.test(location.pathname) ? '/browse' : null;

@@ -25,9 +25,13 @@ export function makeFakeApi() {
     toUser: string;
     slug: string;
     params: Record<string, unknown> | null;
-    status: 'pending' | 'accepted' | 'declined';
+    status: 'pending' | 'accepted' | 'declined' | 'superseded';
+    /** 下发时的创建时间(镜像服务端 created_at;通知 TTL 过滤用)。 */
+    createdAt?: string;
     /** 运行页是否已取过参(一次性投递标记,镜像服务端 delivered_at)。 */
     delivered?: boolean;
+    /** 拒绝回执时间(镜像服务端 responded_at;通知端点回执窗口用)。 */
+    respondedAt?: string;
   }[] = [];
   let currentUserId: string | null = null;
   let seq = 0;
@@ -80,7 +84,7 @@ export function makeFakeApi() {
       from: { id: i.fromUser, username: usernameOf(i.fromUser), avatar: null },
       slug: i.slug,
       params: i.params,
-      createdAt: i.id,
+      createdAt: i.createdAt ?? i.id,
     }));
     const me = currentUserId
       ? { id: currentUserId, username: usernameOf(currentUserId), online: true }
@@ -119,11 +123,17 @@ export function makeFakeApi() {
       const b = users.get(bUsername.toLowerCase())!;
       friendships.push({ id: `f${++seq}`, a: a.id, b: b.id, status: 'accepted', requestedBy: a.id });
     },
-    /** 注入一条 toUser 的待处理游戏邀请。 */
-    seedInvite(fromUsername: string, toUsername: string, slug = 'bvn', params: Record<string, unknown> | null = null) {
+    /** 注入一条 toUser 的待处理游戏邀请(默认 createdAt 为当前时刻;可指定以控制队列顺序)。 */
+    seedInvite(
+      fromUsername: string,
+      toUsername: string,
+      slug = 'bvn',
+      params: Record<string, unknown> | null = null,
+      createdAt = new Date().toISOString(),
+    ) {
       const from = users.get(fromUsername.toLowerCase())!;
       const to = users.get(toUsername.toLowerCase())!;
-      invites.push({ id: `i${++seq}`, fromUser: from.id, toUser: to.id, slug, params, status: 'pending' });
+      invites.push({ id: `i${++seq}`, fromUser: from.id, toUser: to.id, slug, params, status: 'pending', createdAt });
     },
     fetch: vi.fn(async (url: string, options: RequestInit = {}) => {
       const path = new URL(url, 'http://localhost').pathname;
@@ -193,6 +203,16 @@ export function makeFakeApi() {
         return json({ ok: true });
       }
       if (path === '/api/friends' && method === 'GET') return json(lists());
+      // 通知端点:接收方 pending 邀请 + 我发出的邀请的拒绝回执(5 分钟窗口)。
+      if (path === '/api/friends/notifications' && method === 'GET') {
+        if (!currentUserId) return json({ error: '需要登录' }, 401);
+        const responses = invites
+          .filter(
+            (i) => i.fromUser === currentUserId && i.status === 'declined' && i.respondedAt,
+          )
+          .map((i) => ({ id: i.id, to: { id: i.toUser, username: usernameOf(i.toUser) }, respondedAt: i.respondedAt }));
+        return json({ invites: lists().invites, responses });
+      }
       if (path === '/api/presence' && method === 'POST') return json({ ok: true });
       if (path === '/api/friends/requests' && method === 'POST') {
         const target = [...users.values()].find((u) => u.id === body.id);
@@ -266,6 +286,12 @@ export function makeFakeApi() {
         if (to === currentUserId) return json({ error: '不能邀请自己' }, 400);
         if (to === 'test-user') return json({ error: '测试用户无法加入游戏' }, 400);
         if (!isFriendAccepted(currentUserId, to)) return json({ error: '只能邀请好友' }, 400);
+        // 同邀请者新邀请覆盖旧邀请:此前 pending 的同源邀请作废(镜像服务端 superseded)。
+        for (const invite of invites) {
+          if (invite.fromUser === currentUserId && invite.toUser === to && invite.status === 'pending') {
+            invite.status = 'superseded';
+          }
+        }
         invites.push({ id: `i${++seq}`, fromUser: currentUserId, toUser: to, slug, params, status: 'pending' });
         return json({ ok: true });
       }
@@ -277,6 +303,7 @@ export function makeFakeApi() {
           return json({ error: '邀请不存在或已处理' }, 400);
         }
         invite.status = inviteAction[2] === 'accept' ? 'accepted' : 'declined';
+        if (inviteAction[2] === 'decline') invite.respondedAt = new Date().toISOString();
         return json({ ok: true });
       }
       const inviteGet = /^\/api\/invites\/([\w-]+)$/.exec(path);

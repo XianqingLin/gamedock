@@ -1,20 +1,36 @@
 /**
- * 好友邀请(仅信息传递,对应 platform-seam 契约 §4;2026-11-23 落地)。
+ * 好友邀请(仅信息传递,对应 platform-seam 契约 §4)。
  *
  * 邀请 = 「来玩某款游戏」的记录:发出方在游戏运行页的好友面板右键好友发出,
  * 携带当前游戏 slug 与游戏经 SDK 上报的加入参数(平台只透传、不解析)。
- * 接收方在好友列表顶部看到邀请行:进入(标记 accepted → 打开运行页,参数经
- * postMessage 握手交给游戏)或 忽略(标记 declined)。平台不参与连接建立。
+ * 接收方通知:右下角 Toast + 好友栏好友行右侧内联邀请区(前端全站轮询通知端点发现,
+ * 无推送通道)。接受即自动入房:接受 → 打开/重挂运行页(?invite= 深链)→ 游戏落
+ * 主菜单凭未过期票自动入房;游戏内无任何邀请 UI。平台不参与连接建立。
  *
- * params 一次性投递(2026-11-24):运行页首次取参即标记 delivered_at 并返回 params,
- * 之后再取 params 为 null——原「任意状态可重取(刷新恢复)」会把游戏侧已销的票复活
- * (邀请票模型:bvn 兑票/忽略即销票,刷新恢复由游戏侧票自持,见 platform-seam §4)。
+ * 同邀请者新邀请覆盖旧邀请:发出时把此前 pending 的同源邀请标记 superseded(终态,
+ * 不再展示也不再可操作)。
  *
- * 记录形状:{ id, fromUser, toUser, slug, params(object|null), status:'pending'|'accepted'|'declined', createdAt, respondedAt?, deliveredAt? }
+ * 邀请 TTL(3 分钟):过期不落状态位,读取(列表/通知)时过滤,接受/拒绝时明确拒绝——
+ * 过期票兑了也进不了房(房间码早已冷却),不如让 A 重新邀请。
+ *
+ * params 一次性投递:运行页首次取参即标记 delivered_at 并返回 params,
+ * 之后再取 params 为 null——防止游戏侧已销的票被复活(刷新恢复由游戏侧票自持)。
+ *
+ * 记录形状:{ id, fromUser, toUser, slug, params(object|null), status:'pending'|'accepted'|'declined'|'superseded', createdAt, respondedAt?, deliveredAt? }
  */
 import { TEST_USER } from './bot.mjs';
 
 const PARAMS_MAX_BYTES = 1024;
+
+/** 邀请有效期:过期在列表/通知中不可见,接受/拒绝报「邀请已过期」。 */
+export const INVITE_TTL_MS = 3 * 60_000;
+
+/** 发起方回执窗口:被拒绝的邀请在此窗口内随通知端点下发(前端按 id 去重只提示一次)。 */
+export const INVITE_RESPONSE_WINDOW_MS = 5 * 60_000;
+
+function isExpired(invite, now = Date.now()) {
+  return now - Date.parse(invite.createdAt) > INVITE_TTL_MS;
+}
 
 
 const fail = (error) => ({ ok: false, error });
@@ -60,6 +76,15 @@ export async function sendGameInvite(store, fromUserId, { to, slug, params }, ga
 
   if (!friendship || friendship.status !== 'accepted') return fail('只能邀请好友');
 
+  // 同邀请者新邀请覆盖旧邀请:此前 pending 的同源邀请一律作废(superseded),
+  // 接收侧不再堆积同一人的多条邀请。
+  const stale = (await store.listPendingInvitesFor(target.id)).filter(
+    (invite) => invite.fromUser === fromUserId,
+  );
+  for (const invite of stale) {
+    await store.updateInvite(invite.id, { status: 'superseded' });
+  }
+
   const invite = {
     id: crypto.randomUUID(),
     fromUser: fromUserId,
@@ -79,11 +104,12 @@ async function findOwnInvite(store, userId, inviteId, expectedStatus = 'pending'
   return invite;
 }
 
-/** 接收方视角的待处理邀请列表(按时间正序)。 */
+/** 接收方视角的待处理邀请列表(按时间正序;过期邀请不出现在任何展示面)。 */
 export async function listGameInvites(store, userId) {
   const invites = await store.listPendingInvitesFor(userId);
   const out = [];
   for (const invite of invites) {
+    if (isExpired(invite)) continue;
     const from = await store.getUserById(invite.fromUser);
     out.push({
       id: invite.id,
@@ -100,22 +126,41 @@ export async function listGameInvites(store, userId) {
   return { ok: true, invites: out };
 }
 
-/** 接收方点「进入」:标记 accepted,返回完整邀请(params 随后经 hello 交给游戏)。 */
+/** 接收方点「接受」:标记 accepted,返回完整邀请(params 随后经 hello 交给游戏)。 */
 export async function acceptGameInvite(store, userId, inviteId) {
   const invite = await findOwnInvite(store, userId, inviteId);
   if (!invite) return fail('邀请不存在或已处理');
+  if (isExpired(invite)) return fail('邀请已过期');
   const respondedAt = new Date().toISOString();
   await store.updateInvite(invite.id, { status: 'accepted', respondedAt });
   return { ok: true, invite: { ...invite, status: 'accepted', respondedAt } };
 }
 
-/** 接收方点「忽略」:标记 declined。 */
+/** 接收方点「拒绝」:标记 declined(发起方经通知端点的回执窗口看到轻提示)。 */
 export async function declineGameInvite(store, userId, inviteId) {
   const invite = await findOwnInvite(store, userId, inviteId);
   if (!invite) return fail('邀请不存在或已处理');
+  if (isExpired(invite)) return fail('邀请已过期');
   const respondedAt = new Date().toISOString();
   await store.updateInvite(invite.id, { status: 'declined', respondedAt });
   return { ok: true };
+}
+
+/** 发起方回执:我发出的、被拒绝且回执窗口内的邀请(通知端点用;前端按 id 去重只提示一次)。 */
+export async function listDeclinedInvitesFrom(store, userId) {
+  const declined = await store.listInvitesFromWithStatus(userId, 'declined');
+  const now = Date.now();
+  const out = [];
+  for (const invite of declined) {
+    if (!invite.respondedAt || now - Date.parse(invite.respondedAt) > INVITE_RESPONSE_WINDOW_MS) continue;
+    const to = await store.getUserById(invite.toUser);
+    out.push({
+      id: invite.id,
+      to: { id: invite.toUser, username: to?.username ?? '(已注销)' },
+      respondedAt: invite.respondedAt,
+    });
+  }
+  return out;
 }
 
 /** 运行页取邀请:params 仅接收方可见;一次性投递(见模块头)——首次取参标记

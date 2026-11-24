@@ -6,9 +6,9 @@ import { makeFakeApi } from './fake-backend';
 import type { FakeApi } from './fake-backend';
 
 /**
- * 好友面板交互集成测试(2026-11-23 改版):
+ * 好友面板交互集成测试(2026-11-23 改版;2026-11-24 邀请改版):
  * 右键菜单(发送消息/邀请游玩/删除好友)、双击聊天、删除二次确认、
- * 列表顶部邀请行(进入/忽略)与邀请发送(仅游玩上下文)。
+ * 好友行右侧内联邀请区(接受/拒绝)与邀请发送(仅游玩上下文)。
  */
 let fake: FakeApi;
 
@@ -135,10 +135,10 @@ describe('好友间聊天', () => {
 });
 
 describe('游戏邀请', () => {
-  it('列表顶部固定展示待处理邀请:忽略后消失,进入打开运行页深链', async () => {
+  it('邀请内联在好友行右侧:拒绝后消失,接受打开运行页深链', async () => {
     fake.addUser('alice');
     fake.addUser('bob');
-    fake.seedIncomingRequest('alice', 'bob');
+    fake.seedFriendship('alice', 'bob');
     fake.seedInvite('bob', 'alice', 'bvn', { room: '123456', node: 'cn' });
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
 
@@ -151,26 +151,41 @@ describe('游戏邀请', () => {
     fireEvent.click(within(loginDialog).getByRole('button', { name: '登录' }));
     await screen.findAllByRole('button', { name: /测试用户/ });
 
-    // 邀请行在列表顶部:发起人 + 游戏名 + 进入/忽略
-    expect(screen.getByText('邀请你游玩')).toBeInTheDocument();
-    const inviteLabel = screen.getByText('邀请你游玩').closest('.friend-invite-label') as HTMLElement;
-    expect(within(inviteLabel).getByText('死神 VS 火影 重构版')).toBeInTheDocument();
-    expect(screen.getByText('bob')).toBeInTheDocument();
+    // 邀请内联在 bob 好友行右侧:文字 + 接受/拒绝两钮(在文字下方)
+    const inviteText = await screen.findByText((_, el) => el?.classList.contains('friend-invite-text') === true);
+    expect(inviteText.closest('.friend-invite-side')).toBeInTheDocument();
+    expect(screen.queryByText('邀请你游玩')).not.toBeInTheDocument();
 
+    // 拒绝 → 好友行内联邀请区消失(队列中的 Toast 最多再停留一个周期,与行内状态无关)
+    fireEvent.click(screen.getByRole('button', { name: '拒绝 bob 的游玩邀请' }));
+    await waitFor(() => expect(document.querySelector('.friend-invite-text')).toBeNull());
 
-    // 忽略 → 行消失
-    fireEvent.click(screen.getByRole('button', { name: '忽略 bob 的游玩邀请' }));
-    await waitFor(() => expect(screen.queryByText('邀请你游玩')).not.toBeInTheDocument());
-
-    // 再注入一条,重开抽屉(列表重拉),点「进入」→ 打开 /play/bvn?invite=... 新窗口(带 noopener)
+    // 再注入一条,重开抽屉(列表重拉),点「接受」→ 打开 /play/bvn?invite=... 新窗口(带 noopener)
     fake.seedInvite('bob', 'alice', 'bvn', { room: '654321', node: 'cf' });
     await closeAndReopenPanel('alice');
-    await screen.findByText('邀请你游玩');
+    await screen.findByText((_, el) => el?.classList.contains('friend-invite-text') === true);
 
     fireEvent.click(screen.getByRole('button', { name: '接受 bob 的游玩邀请' }));
     await waitFor(() => expect(openSpy).toHaveBeenCalled());
     const [url] = openSpy.mock.calls[0]!;
     expect(String(url)).toMatch(/^\/play\/bvn\?invite=i\d+$/);
+    openSpy.mockRestore();
+  });
+
+  it('运行页游玩同一游戏时接受邀请:原地换 ?invite= 重挂,不开新窗口', async () => {
+    fake.addUser('bob');
+    renderApp(['/play/bvn']);
+    await openPanel();
+    await registerViaPanel('alice');
+    fake.seedFriendship('alice', 'bob');
+    fake.seedInvite('bob', 'alice', 'bvn', { room: '654321', node: 'cf' });
+    await closeAndReopenPanel('alice');
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    fireEvent.click(await screen.findByRole('button', { name: '接受 bob 的游玩邀请' }));
+    await waitFor(() => expect(openSpy).not.toHaveBeenCalled());
+    // 抽屉自动关闭,运行页携带新 ?invite= 原地重挂(iframe src 未变,join 参数经 hello 重新下发)
+    await waitFor(() => expect(screen.queryByRole('button', { name: '接受 bob 的游玩邀请' })).not.toBeInTheDocument());
     openSpy.mockRestore();
   });
 

@@ -200,8 +200,30 @@ describe('游戏邀请 HTTP 流程', () => {
     });
     expect(sent.status).toBe(200);
     const inviteId = (await b.request('GET', '/api/friends')).data.invites[0].id;
-    return { b, inviteId };
+    return { a, b, inviteId };
   }
+
+  it('通知端点:接收方 pending 邀请、发起方拒绝回执、未登录拒绝', async () => {
+    const { a, b, inviteId } = await makeInvite();
+
+    // 接收方视角:pending 邀请随通知下发,尚无回执
+    const receiverNotes = await b.request('GET', '/api/friends/notifications');
+    expect(receiverNotes.status).toBe(200);
+    expect(receiverNotes.data.invites.map((invite) => invite.id)).toContain(inviteId);
+    expect(receiverNotes.data.responses).toEqual([]);
+
+    // 未登录拒绝
+    const anon = makeClient();
+    expect((await anon.request('GET', '/api/friends/notifications')).status).toBe(401);
+
+    // 拒绝后:发起方在回执字段看到(接收方 pending 列表随之消失)
+    await b.request('POST', `/api/invites/${inviteId}/decline`);
+    const senderNotes = await a.request('GET', '/api/friends/notifications');
+    expect(senderNotes.status).toBe(200);
+    expect(senderNotes.data.invites).toEqual([]);
+    expect(senderNotes.data.responses).toHaveLength(1);
+    expect(senderNotes.data.responses[0].id).toBe(inviteId);
+  });
 
   it('运行页取参一次性投递:首次返回 params,刷新重取 params 为 null', async () => {
     const { b, inviteId } = await makeInvite();
@@ -217,8 +239,7 @@ describe('游戏邀请 HTTP 流程', () => {
     expect(second.data.invite.params).toBeNull();
   });
 
-  it('非接收方取参拒绝;未接入游戏拒绝', async () => {
-    const { b, inviteId } = await makeInvite();
+  it('非接收方取参拒绝;未接入游戏拒绝', async () => {    const { b, inviteId } = await makeInvite();
     const stranger = makeClient();
     await stranger.request('POST', '/api/auth/register', { username: 'stranger', password: 'secret66' });
     expect((await stranger.request('GET', `/api/invites/${inviteId}`)).status).toBe(404);

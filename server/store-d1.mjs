@@ -212,6 +212,14 @@ export function createD1Store(d1) {
       return results.map(inviteFromRow);
     },
 
+    async listInvitesFromWithStatus(fromUserId, status) {
+      const { results } = await d1
+        .prepare('SELECT * FROM game_invites WHERE from_user = ? AND status = ? ORDER BY rowid')
+        .bind(fromUserId, status)
+        .all();
+      return results.map(inviteFromRow);
+    },
+
     async updateInvite(id, patch) {
       if (patch.status !== undefined) {
         await d1

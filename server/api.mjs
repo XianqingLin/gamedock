@@ -8,6 +8,7 @@ import {
   acceptGameInvite,
   declineGameInvite,
   getGameInvite,
+  listDeclinedInvitesFrom,
 } from './invites.mjs';
 import {
   SESSION_COOKIE,
@@ -232,6 +233,14 @@ async function handleFriendsApi(ctx, pathname) {
     return respond(ctx, sendJson(200, await listsPayload()));
   }
 
+  // 通知端点(全站轻轮询,无推送通道):接收方待处理邀请 + 发起方的拒绝回执。
+  // 右下角 Toast 队列、好友入口角标与「XX 拒绝了你的邀请」提示都由它驱动。
+  if (pathname === '/api/friends/notifications' && method === 'GET') {
+    const invites = await listGameInvites(env.store, user.id);
+    const responses = await listDeclinedInvitesFrom(env.store, user.id);
+    return respond(ctx, sendJson(200, { invites: invites.invites, responses }));
+  }
+
   const requestAction = /^\/api\/friends\/requests\/([\w-]+)\/(accept|decline)$/.exec(pathname);
   if (requestAction && method === 'POST') {
     const [, requestId, action] = requestAction;
@@ -302,11 +311,12 @@ async function handleChatApi(ctx, pathname) {
 
 /**
  * 好友邀请(仅信息传递):
- * - POST /api/invites {to, slug, params}:发出邀请(对方须为好友;params 为游戏透传参数)
- * - GET /api/invites:接收方的待处理邀请列表
+ * - POST /api/invites {to, slug, params}:发出邀请(对方须为好友;params 为游戏透传参数;
+ *   同邀请者重复发出覆盖旧邀请 → superseded)
+ * - GET /api/invites:接收方的待处理邀请列表(TTL 内)
  * - GET /api/invites/:id:接收方取单条(运行页拿 params;一次性投递,重取 params 为 null)
- * - POST /api/invites/:id/accept:接收方「进入」
- * - POST /api/invites/:id/decline:接收方「忽略」
+ * - POST /api/invites/:id/accept:接收方「接受」(之后游戏侧落主菜单自动入房)
+ * - POST /api/invites/:id/decline:接收方「拒绝」(发起方经通知端点获得回执)
  */
 async function handleInvitesApi(ctx, pathname) {
   if (!pathname.startsWith('/api/invites')) return false;

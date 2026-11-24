@@ -14,7 +14,8 @@
 - 聊天是好友间双向会话:D1 `chat_messages` 改 `{id, from_id, to_id, content, created_at}`(双向各存一条,对等);历史返回最多 100 条,前端打开聊天框期间每 4 秒轮询收新消息(无推送)。单条消息 ≤2000 字。
 - peer 校验:只能与已接受好友聊天(非好友 404「只能与好友聊天」;对自己发消息同样拒绝)。测试用户 bot 是真实 users 行(passSalt/passHash 占位,无法登录),注册与打开好友列表时幂等补建其好友关系;给 TA 发消息服务端追加一条固定回声式自动回复(引用原文截断 50 字),无外部 AI 调用。
 - bot 用户名「测试用户」为保留名(注册撞名报「用户名已存在」);bot 不可删除(removeFriend 明确报错)、不可被邀请。
-- 好友邀请(仅信息传递):D1 `game_invites` `{id, from_user, to_user, slug, params, status, created_at, responded_at}`;`POST /api/invites`(对方须为好友、slug 须已接入、params 为可选对象且值限 string/number/boolean、JSON ≤1KB,平台不解析)、`GET /api/invites`(接收方 pending 列表,并入 `GET /api/friends` 响应的 `invites` 字段)、`GET /api/invites/:id`(接收方取单条,任意状态——运行页刷新后可重取参数)、`POST /api/invites/:id/accept|decline`。
+- 好友邀请(仅信息传递;2026-11-24 定案「通知 + 接受即自动入房」,契约见工作区 platform-seam.md §4):D1 `game_invites` `{id, from_user, to_user, slug, params, status, created_at, responded_at, delivered_at}`;`POST /api/invites`(对方须为好友、slug 须已接入、params 为可选对象且值限 string/number/boolean、JSON ≤1KB,平台不解析;**发出时把该邀请者给同一接收方的既有 pending 邀请标记 `superseded`**——同邀请者新覆盖旧)、`GET /api/invites`(接收方 pending 列表,并入 `GET /api/friends` 响应的 `invites` 字段)、`GET /api/invites/:id`(接收方取单条——运行页拿 params;**一次性投递**:首次取参标记 delivered_at,重取 params 为 null)、`POST /api/invites/:id/accept|decline`。**邀请 TTL 3 分钟**:读取(列表/通知)与接受/拒绝均按 `created_at + TTL` 过期判定,过期不落状态位、一律按「邀请已过期」拒绝。
+- 通知端点(2026-11-24):`GET /api/friends/notifications`(需登录)→ `{ invites: [接收方 pending 邀请,形状同 /api/invites], responses: [我发出的邀请中 status=declined 且 respondedAt 在 5 分钟窗口内的 {id, to:{id,username}, respondedAt}] }`——接收方发现新邀请与发起方拒绝回执共用此端点;**前端全站轮询**:登录态下 10 秒/次(页面不可见退避 30 秒),驱动右下角 Toast 队列、好友入口未读角标与发起方回执提示(Toast 已弹/回执已示按邀请 id 在客户端去重)。无推送通道,不做 WebSocket/SSE。
 - 邀请深链(platform-seam §4):运行页消费 `?invite=<id>`,把邀请 params 经握手 `join` 字段下发给游戏;游戏经 `game:invite-context` 上报当前可加入参数(形状同 params 校验,非法按 null 处理),GameFrame 暂存最新值供好友面板「邀请游玩」携带。SDK(`packages/game-sdk`) hello 增加 `join?: Record<string, unknown> | null`,`GameDockSdk.join` 原样暴露;SDK 改动后必须重新 `npm run build`(dist 被 bvn 以 file: 依赖硬链接引用)。
 - 在线状态(2026-11-23):来源为登录态浏览器的心跳——App 内 `PresenceHeartbeat` 登录后立即并每 60 秒(页面可见时)POST `/api/presence`,服务端写 `users.last_seen_at`;好友列表按 5 分钟窗口判定在线,无心跳一律离线,不编造。存量库执行 `server/migrations/migration-presence.sql`(加 `last_seen_at` 列),新建库直接用最新 `schema.sql`。
 - 平台不做联机的边界不变:聊天是平台社交功能,不是游戏内联机通道。
@@ -83,7 +84,7 @@
 测试至少覆盖:
 
 - 搜索与分类组合筛选、专题筛选、排序方式、空结果与清除筛选、按 slug 查找、启动四态、外链协议校验与危险协议拦截、筛选排除选中项的清理、缺省封面回退。
-- 注册/登录/登出/me 全流程(含错误密码、重复注册、会话伪造拒绝、bot 保留用户名撞名);好友全流程及无效操作(含测试用户固定/不可删除、按 ID 搜索、同意流);好友聊天历史/发送/未登录拒绝/peer 校验(非好友与本人拒绝)/bot 自动回复;邀请全流程(发送校验:非好友/自己/bot/未接入 slug/非法 params,接受/忽略幂等,深链取单条);在线心跳(未登录拒绝、心跳后好友显示在线);存档写读列删、slug 校验、大小上限、未登录拒绝;资料更新(2026-11-23:改名校验/查重、头像预设编号校验与清除、未登录拒绝)与跨游戏存档聚合(空列表、按游戏分组)。
+- 注册/登录/登出/me 全流程(含错误密码、重复注册、会话伪造拒绝、bot 保留用户名撞名);好友全流程及无效操作(含测试用户固定/不可删除、按 ID 搜索、同意流);好友聊天历史/发送/未登录拒绝/peer 校验(非好友与本人拒绝)/bot 自动回复;邀请全流程(发送校验:非好友/自己/bot/未接入 slug/非法 params,接受/忽略幂等,深链取单条;2026-11-24 追加:同邀请者重复发送覆盖旧邀请为 superseded、TTL 过期后列表不可见且接受/拒绝报「邀请已过期」、通知端点返回 pending 邀请与拒绝回执、未登录拒绝);在线心跳(未登录拒绝、心跳后好友显示在线);存档写读列删、slug 校验、大小上限、未登录拒绝;资料更新(2026-11-23:改名校验/查重、头像预设编号校验与清除、未登录拒绝)与跨游戏存档聚合(空列表、按游戏分组)。
 
 - CORS:内容域放行(含 preflight)、自身源放行、第三方源拒绝。
 - R2 静态资源服务:目录回退、Content-Type 推断、缓存策略、Range、路径穿越、未命中 404。

@@ -6,6 +6,7 @@ import {
   acceptGameInvite,
   declineGameInvite,
   getGameInvite,
+  listDeclinedInvitesFrom,
   listGameInvites,
   sendGameInvite,
 } from '../invites.mjs';
@@ -126,5 +127,66 @@ describe('accept / decline / get', () => {
 
     expect((await declineGameInvite(store, bob.id, inviteId)).ok).toBe(true);
     expect((await listGameInvites(store, bob.id)).invites).toHaveLength(0);
+  });
+});
+
+describe('2026-11-24 邀请改版:覆盖 / 过期 / 回执', () => {
+  it('同一邀请者重复发送覆盖旧邀请(superseded),接收侧只见最新一条', async () => {
+    const { store, alice, bob } = await setup();
+    await sendGameInvite(store, alice.id, { to: bob.id, slug: 'bvn' }, gameSlugs);
+    const staleId = (await store.listPendingInvitesFor(bob.id))[0].id;
+
+    const again = await sendGameInvite(
+      store,
+      alice.id,
+      { to: bob.id, slug: 'bvn', params: { room: '999999', node: 'cn' } },
+      gameSlugs,
+    );
+    expect(again.ok).toBe(true);
+
+    const invites = (await listGameInvites(store, bob.id)).invites;
+    expect(invites).toHaveLength(1);
+    expect(invites[0]).toMatchObject({ id: again.invite.id, params: { room: '999999' } });
+
+    // 旧邀请已 superseded:不可接受也不可拒绝(终态,不在任何展示面)。
+    expect((await store.getInvite(staleId)).status).toBe('superseded');
+    expect((await acceptGameInvite(store, bob.id, staleId)).ok).toBe(false);
+  });
+
+  it('TTL 过期:列表不可见,接受/拒绝报「邀请已过期」', async () => {
+    const { store, alice, bob } = await setup();
+    await sendGameInvite(store, alice.id, { to: bob.id, slug: 'bvn' }, gameSlugs);
+    // 直接把 createdAt 拨回 4 分钟前(记忆存储返回活对象,原地改写模拟时间流逝)。
+    const record = await store.getInvite((await store.listPendingInvitesFor(bob.id))[0].id);
+    record.createdAt = new Date(Date.now() - 4 * 60_000).toISOString();
+
+    expect((await listGameInvites(store, bob.id)).invites).toHaveLength(0);
+    expect((await acceptGameInvite(store, bob.id, record.id)).error).toBe('邀请已过期');
+    expect((await declineGameInvite(store, bob.id, record.id)).error).toBe('邀请已过期');
+
+    // 新邀请(createdAt 新鲜)不受影响。
+    await sendGameInvite(store, alice.id, { to: bob.id, slug: 'bvn' }, gameSlugs);
+    expect((await listGameInvites(store, bob.id)).invites).toHaveLength(1);
+  });
+
+  it('发起方回执:listDeclinedInvitesFrom 只返回被拒绝且回执窗口内的邀请', async () => {
+    const { store, alice, bob, carol } = await setup();
+    await sendFriendRequest(store, alice.id, carol.id);
+    await respondToRequest(store, carol.id, (await listFriends(store, carol.id)).incoming[0].id, true);
+
+    await sendGameInvite(store, alice.id, { to: bob.id, slug: 'bvn' }, gameSlugs);
+    await sendGameInvite(store, alice.id, { to: carol.id, slug: 'bvn' }, gameSlugs);
+    await declineGameInvite(store, bob.id, (await listGameInvites(store, bob.id)).invites[0].id);
+    await declineGameInvite(store, carol.id, (await listGameInvites(store, carol.id)).invites[0].id);
+
+    const responses = await listDeclinedInvitesFrom(store, alice.id);
+    expect(responses).toHaveLength(2);
+    expect(responses.map((r) => r.to.username).sort()).toEqual(['bob', 'carol']);
+
+    // 回执窗口外的拒绝不再下发(把 respondedAt 拨回 10 分钟前)。
+    for (const record of await store.listInvitesFromWithStatus(alice.id, 'declined')) {
+      record.respondedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    }
+    expect(await listDeclinedInvitesFrom(store, alice.id)).toHaveLength(0);
   });
 });

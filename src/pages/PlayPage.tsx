@@ -8,6 +8,7 @@ import { friendsApi } from '../lib/api';
 import { GameFrame } from '../components/GameFrame';
 import { EmptyState } from '../components/EmptyState';
 import { useAuth } from '../state/auth';
+import { useInviteHub } from '../state/invites';
 import { SocialSidebar } from '../components/SocialSidebar';
 import { UserArea } from '../components/UserArea';
 
@@ -16,16 +17,19 @@ import { UserArea } from '../components/UserArea';
  * 新窗口打开的独立游戏界面：无左侧栏，顶栏承担标题与账号区；
  * 游戏逻辑全部在 iframe 内。仅站内游戏经由此页；外链游戏在详情页直接新窗口打开。
  *
- * 邀请深链(2026-11-23):好友点「进入」打开 ?invite=<id>,运行页取回该邀请的
- * 游戏自定义参数,经 hello 的 join 字段交给游戏(平台只透传、不解析)。
- * 取参一次性投递(2026-11-24):首次取参即下发,之后(params null)不再重发——
+ * 邀请深链:接受邀请打开 ?invite=<id>(运行页未打开时新窗口;已在本页游玩同一游戏时
+ * 原地换 ?invite=),运行页取回该邀请的游戏自定义参数,经 hello 的 join 字段交给游戏
+ * (平台只透传、不解析)。取参一次性投递:首次取参即下发,之后(params null)不再重发——
  * 刷新恢复由游戏侧邀请票自持(票存游戏 localStorage),平台重发会复活已销的票。
+ * GameFrame 以 inviteId 为 key:接受第二条邀请原地重挂 iframe 重新握手,
+ * 游戏 SDK 只认首个 hello,不重挂则新 join 无法送达。
  */
 export function PlayPage() {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
   const game = findBySlug(GAMES, slug);
   const { status, user } = useAuth();
+  const { openRequest, markInvitesViewed } = useInviteHub();
   const stageRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
@@ -33,6 +37,14 @@ export function PlayPage() {
   const [inviteContext, setInviteContext] = useState<Record<string, unknown> | null>(null);
   const inviteId = searchParams.get('invite');
   const [joinParams, setJoinParams] = useState<Record<string, unknown> | null | undefined>(undefined);
+
+  // 好友抽屉:邀请 Toast 点击经 hub 计数打开;打开即视为邀请已读(角标清零)。
+  useEffect(() => {
+    if (openRequest > 0) setSocialOpen(true);
+  }, [openRequest]);
+  useEffect(() => {
+    if (socialOpen) markInvitesViewed();
+  }, [socialOpen, markInvitesViewed]);
 
   useEffect(() => {
     const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -170,6 +182,7 @@ export function PlayPage() {
       </header>
       <main className="play-main" ref={stageRef}>
         <GameFrame
+          key={inviteId ?? 'no-invite'}
           game={game}
           src={resolution.url}
           user={status === 'user' && user ? { id: user.id, username: user.username } : null}

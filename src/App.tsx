@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './state/auth';
+import { InviteHubProvider } from './state/invites';
 import { presenceApi } from './lib/api';
 import { ExplorePage } from './pages/ExplorePage';
 import { BrowsePage } from './pages/BrowsePage';
@@ -9,6 +10,7 @@ import { PlayPage } from './pages/PlayPage';
 import { AchievementsPage } from './pages/AchievementsPage';
 import { SavesPage } from './pages/SavesPage';import { NotFoundPage } from './pages/NotFoundPage';
 import { AppSidebar } from './components/AppSidebar';
+import { InviteToasts } from './components/InviteToasts';
 import { trackNavigation } from './lib/navStack';
 
 /**
@@ -50,20 +52,24 @@ export default function App() {
   return (
     <AuthProvider>
       <PresenceHeartbeat />
-      <div className="app-shell">
-        {showSidebar && <AppSidebar />}
-        <div className="app-content">
-          <Routes>
-            <Route path="/" element={<ExplorePage />} />
-            <Route path="/browse" element={<BrowsePage />} />
-            <Route path="/games/:slug" element={<GameDetailPage />} />
-            <Route path="/play/:slug" element={<PlayPage />} />
-            <Route path="/achievements" element={<AchievementsPage />} />
-            <Route path="/saves" element={<SavesPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+      {/* 全站邀请通知:轮询 + 右下角 Toast 队列(登录态;任何页面都可见,不依赖好友抽屉)。 */}
+      <InviteHubProvider>
+        <InviteToasts />
+        <div className="app-shell">
+          {showSidebar && <AppSidebar />}
+          <div className="app-content">
+            <Routes>
+              <Route path="/" element={<ExplorePage />} />
+              <Route path="/browse" element={<BrowsePage />} />
+              <Route path="/games/:slug" element={<GameDetailPage />} />
+              <Route path="/play/:slug" element={<PlayPage />} />
+              <Route path="/achievements" element={<AchievementsPage />} />
+              <Route path="/saves" element={<SavesPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </div>
         </div>
-      </div>
+      </InviteHubProvider>
     </AuthProvider>
   );
 }
